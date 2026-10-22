@@ -326,11 +326,15 @@ private let appTerminationActivationGracePeriod: TimeInterval = 1
     lastAppTerminationDate = .now
 }
 
-@MainActor func getInactiveProjectActivationPolicy() async -> InactiveProjectActivationPolicy {
+/// `prevFocusedWindowId` is the focused window before the activation. If it's gone, the activation was caused by closing
+/// or quitting (macOS closes the windows of a quitting app and activates the next app before the process terminates)
+@MainActor func getInactiveProjectActivationPolicy(prevFocusedWindowId: UInt32?) async -> InactiveProjectActivationPolicy {
     if isUnitTest { return config.onInactiveProjectActivation }
-    // The activation of the next app may be delivered before the termination of the quit app
     try? await Task.sleep(for: .milliseconds(150))
-    return Date.now.timeIntervalSince(lastAppTerminationDate) < appTerminationActivationGracePeriod
+    let isPrevFocusedWindowGone = prevFocusedWindowId.map { id in
+        (CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(id)) as? [[String: Any]] ?? []).isEmpty
+    } == true
+    return isPrevFocusedWindowGone || Date.now.timeIntervalSince(lastAppTerminationDate) < appTerminationActivationGracePeriod
         ? .rehide
         : config.onInactiveProjectActivation
 }
@@ -339,6 +343,7 @@ private let appTerminationActivationGracePeriod: TimeInterval = 1
 /// Returns true if the event was handled
 @MainActor func handleInactiveProjectActivation(_ nsApp: NSRunningApplication, _ event: RefreshSessionEvent) async throws -> Bool {
     if config.projects.isEmpty || nsApp.activationPolicy != .regular { return false }
+    let prevFocusedWindowId = focus.windowOrNil?.windowId
     // Our own hide/unhide calls trigger activations of other apps. Make the decision on the settled state
     while isProjectSwitchInProgress {
         try await Task.sleep(for: .milliseconds(10))
@@ -348,7 +353,7 @@ private let appTerminationActivationGracePeriod: TimeInterval = 1
     if isPerWindowProcess(app) { return false }
     guard let project = getProjectName(of: app), project != activeProjectName, !app.nsApp.isHidden else { return false }
     guard let token: RunSessionGuard = .isServerEnabled else { return false }
-    let policy = await getInactiveProjectActivationPolicy()
+    let policy = await getInactiveProjectActivationPolicy(prevFocusedWindowId: prevFocusedWindowId)
     try await runLightSession(event, token) {
         switch policy {
             case ._switch:

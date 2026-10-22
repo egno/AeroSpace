@@ -253,7 +253,7 @@ extension Window {
         markNativeFocusAsSeen(window)
         return true
     }
-    switch await getInactiveProjectActivationPolicy() {
+    switch await getInactiveProjectActivationPolicy(prevFocusedWindowId: focus.windowOrNil?.windowId) {
         case ._switch:
             await switchProject(to: project, preferredPid: nil, preferredWindowId: window.windowId)
             return false
