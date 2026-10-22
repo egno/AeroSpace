@@ -63,7 +63,7 @@ func parseProjectNamePosArg(i: PosArgParserInput) -> ParsedCliArgs<String> {
 
 /// Project names are used in regexes and shell commands via `{project}` substitution. Keep them safe
 public func parseProjectName(_ raw: String) -> ResOrStr<String> {
-    !raw.isEmpty && raw.allSatisfy({ ($0.isASCII && ($0.isLowercase || $0.isNumber)) || $0 == "_" || $0 == "-" })
+    !raw.isEmpty && raw.allSatisfy { ($0.isASCII && ($0.isLowercase || $0.isNumber)) || $0 == "_" || $0 == "-" }
         ? .success(raw)
         : .failure("Project name '\(raw)' must match [a-z0-9_-]+ regex")
 }

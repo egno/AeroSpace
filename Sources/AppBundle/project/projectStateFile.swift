@@ -34,7 +34,7 @@ private var projectStateFileUrl: URL {
     if isUnitTest || !isProjectStateRestored { return }
     let state = ProjectStateFile(
         activeProject: activeProjectName,
-        prevActiveProject: prevActiveProjectName ?? nil,
+        prevActiveProject: prevActiveProjectName.flatMap { $0 },
         hasPrevActiveProject: prevActiveProjectName != nil,
         hiddenPids: projectHiddenPids.sorted(),
         ownershipOverrides: projectOwnershipOverrides.sorted(by: { $0.key < $1.key }).map { pid, ownership in
@@ -73,7 +73,7 @@ private var projectStateFileUrl: URL {
 @MainActor func onProjectsConfigReloaded() async {
     resetProjectOwnershipCache()
     if !isProjectStateRestored { return }
-    if let prev = prevActiveProjectName ?? nil, !config.projects.contains(where: { $0.name == prev }) {
+    if case let prev?? = prevActiveProjectName, !config.projects.contains(where: { $0.name == prev }) {
         prevActiveProjectName = nil
     }
     projectOwnershipOverrides = projectOwnershipOverrides.filter { _, ownership in

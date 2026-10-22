@@ -263,7 +263,7 @@ final class ProjectTest: XCTestCase {
         assertEquals(getNextPrevProject([], current: nil, .next, wrapAround: true), .failure("The list of projects is empty"))
     }
 
-    func testProjectFilterAndListProjects() async {
+    func testProjectFilterAndListProjects() {
         setUpProjectsConfig()
         activeProjectName = "anna"
         assertTrue(ProjectFilter.name("bob").matches(bobChrome))

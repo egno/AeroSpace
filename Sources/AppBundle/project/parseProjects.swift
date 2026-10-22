@@ -5,7 +5,6 @@ let openPlaceholder = "{open}"
 
 /// `[project-apps.<id>]`
 struct ProjectAppDef: ConvenienceMutable, Equatable {
-    var id: String = ""
     var rawIf: String? = nil
     var launch: String? = nil
     var globalLaunch: String? = nil
@@ -53,20 +52,20 @@ private struct RawProjectAppRef: ConvenienceMutable {
 }
 
 private let projectAppDefParser: [String: any ParserProtocol<ProjectAppDef>] = [
-    "if": Parser(\.rawIf, { raw, backtrace in parseString(raw, backtrace).map(Optional.init) }),
-    "launch": Parser(\.launch, { raw, backtrace in parseString(raw, backtrace).map(Optional.init) }),
-    "global-launch": Parser(\.globalLaunch, { raw, backtrace in parseString(raw, backtrace).map(Optional.init) }),
+    "if": Parser(\.rawIf) { raw, backtrace in parseString(raw, backtrace).map(Optional.init) },
+    "launch": Parser(\.launch) { raw, backtrace in parseString(raw, backtrace).map(Optional.init) },
+    "global-launch": Parser(\.globalLaunch) { raw, backtrace in parseString(raw, backtrace).map(Optional.init) },
     "bundle-id": Parser(\.bundleId, parseBundleId),
 ]
 
 private let rawProjectParser: [String: any ParserProtocol<RawProject>] = [
-    "name": Parser(\.name, { raw, backtrace in parseString(raw, backtrace).map(Optional.init) }),
+    "name": Parser(\.name) { raw, backtrace in parseString(raw, backtrace).map(Optional.init) },
     "apps": Parser(\.apps, parseRawProjectAppRefs),
-    "link-browser": Parser(\.linkBrowser, { raw, backtrace in parseString(raw, backtrace).map(Optional.init) }),
+    "link-browser": Parser(\.linkBrowser) { raw, backtrace in parseString(raw, backtrace).map(Optional.init) },
 ]
 
 private let rawProjectAppRefParser: [String: any ParserProtocol<RawProjectAppRef>] = [
-    "app": Parser(\.appId, { raw, backtrace in parseString(raw, backtrace).map(Optional.init) }),
+    "app": Parser(\.appId) { raw, backtrace in parseString(raw, backtrace).map(Optional.init) },
     "autostart": Parser(\.autostart, parseBool),
     "open": Parser(\.open, parseProjectArrayOfStrings),
 ]
@@ -79,7 +78,7 @@ func parseProjectAppDefs(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: 
     var result: [String: ProjectAppDef] = [:]
     for (id, rawDef) in table {
         let backtrace = backtrace + .key(id)
-        let def = parseTable(rawDef, ProjectAppDef(id: id), projectAppDefParser, backtrace, &c)
+        let def = parseTable(rawDef, ProjectAppDef(), projectAppDefParser, backtrace, &c)
         if def.rawIf == nil {
             c.errors.append(.init(backtrace, "'if' is mandatory key"))
             continue
