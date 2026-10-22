@@ -747,7 +747,7 @@ the shared match wins. Other ties are reported as errors by `reload-config`, and
 and restored on startup.
 * xref:commands.adoc#project-launch[project-launch] launches the apps of a project or focuses the running ones
 ("launch or focus").
-With no active project, `project-launch --app <id>` targets the global instance of the app (`bundle-id`, `global-launch`).
+With no active project (or when the active project doesn't reference the app and `--project` isn't given), `project-launch --app <id>` targets the global instance of the app (`bundle-id`, `global-launch`).
 `project <name> --launch-missing` launches the missing `autostart` apps after the switch.
 Launch commands get `AEROSPACE_PROJECT` environment variable.
 * xref:commands.adoc#project-quit[project-quit] gracefully quits all processes of a project.

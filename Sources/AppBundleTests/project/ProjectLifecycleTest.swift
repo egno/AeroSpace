@@ -126,9 +126,14 @@ final class ProjectLifecycleTest: XCTestCase {
     func testLaunchNotReferencedApp() async {
         setUpProjectsConfig()
         activeProjectName = "anna"
-        let result = await run("project-launch --app kitty firefox")
+        let result = await run("project-launch --project anna --app kitty firefox")
         assertEquals(result.exitCode.rawValue, 2)
         assertEquals(result.stderr, ["Project 'anna' doesn't reference app 'firefox'"])
+        assertEquals(projectSideEffectsForTests, []) // All or nothing
+
+        // Without --project, apps that the active project doesn't reference target their global instances
+        let implicit = await run("project-launch --app kitty firefox")
+        assertEquals(implicit.stderr, ["App 'firefox' has no 'bundle-id'. It's required to find the global instance"])
         assertEquals(projectSideEffectsForTests, []) // All or nothing
 
         let unknown = await run("project-launch --project dave")
@@ -187,6 +192,27 @@ final class ProjectLifecycleTest: XCTestCase {
         result = await run("project bob")
         assertEquals(activeProjectName, "bob")
         assertEquals(projectSideEffectsForTests, []) // No --launch-missing
+    }
+
+    func testGlobalFallbackForAppsTheActiveProjectDoesntReference() async {
+        setUpProjectsConfig(projectsTestConfig + "\n[[projects]]\nname = 'p'\napps = ['cursor']\n")
+        activeProjectName = "p"
+        runningAppsForTests = [annaChrome, personalChrome, slack]
+        let root = focus.workspace.rootTilingContainer
+        TestProjectWindow.new(id: 1, app: annaChrome, parent: root)
+        let personalWindow = TestProjectWindow.new(id: 2, app: personalChrome, parent: root)
+        let slackWindow = TestProjectWindow.new(id: 3, app: slack, parent: root)
+        assertTrue(slackWindow.focusWindow())
+
+        // 'p' doesn't reference chrome -> the global instance, not anna's
+        var result = await run("project-launch --app chrome")
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(focus.windowOrNil, personalWindow)
+        assertEquals(activeProjectName, "p")
+
+        // An explicit --project still fails
+        result = await run("project-launch --project p --app chrome")
+        assertEquals(result.stderr, ["Project 'p' doesn't reference app 'chrome'"])
     }
 
     func testGlobalFallback() async {
