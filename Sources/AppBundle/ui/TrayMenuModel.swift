@@ -11,6 +11,7 @@ public final class TrayMenuModel: ObservableObject {
     /// Is "layouting" enabled
     @Published var isEnabled: Bool = true
     @Published var workspaces: [WorkspaceViewModel] = []
+    @Published var projects: [ProjectViewModel] = []
     @Published var experimentalUISettings: ExperimentalUISettings = ExperimentalUISettings()
     @Published var sponsorshipMessage: String = sponsorshipPrompts.randomElement().orDie()
     @Published var lastReloadConfigContainedWarnings: Bool = false
@@ -27,6 +28,7 @@ enum AxPermissionStatus: Equatable {
     let sortedMonitors = sortedMonitorInfos
     let focus = focus
     TrayMenuModel.shared.trayText = (activeMode?.takeIf { $0 != mainModeId }?.first.map { "(\($0.uppercased())) " } ?? "") +
+        (activeProjectName.map { "\($0.uppercased()) ┃ " } ?? "") +
         sortedMonitors
         .map {
             let hasFullscreenWindows = $0.activeWorkspace.allLeafWindowsRecursive.contains { $0.isFullscreen }
@@ -61,6 +63,9 @@ enum AxPermissionStatus: Equatable {
             hasFullscreenWindows: hasFullscreenWindows,
         )
     }
+    if let activeProjectName {
+        items.insert(TrayItem(type: .project, name: activeProjectName.uppercased(), isActive: true, hasFullscreenWindows: false), at: 0)
+    }
     let mode = activeMode?.takeIf { $0 != mainModeId }?.first.map {
         TrayItem(type: .mode, name: $0.uppercased(), isActive: true, hasFullscreenWindows: false)
     }
@@ -68,6 +73,12 @@ enum AxPermissionStatus: Equatable {
         items.insert(mode, at: 0)
     }
     TrayMenuModel.shared.trayItems = items
+    TrayMenuModel.shared.projects = config.projects.map { ProjectViewModel(name: $0.name, isActive: $0.name == activeProjectName) }
+}
+
+struct ProjectViewModel: Hashable {
+    let name: String
+    let isActive: Bool
 }
 
 struct WorkspaceViewModel: Hashable {
@@ -81,6 +92,7 @@ struct WorkspaceViewModel: Hashable {
 
 enum TrayItemType: String, Hashable {
     case mode
+    case project
     case workspace
 }
 
@@ -92,6 +104,8 @@ struct TrayItem: Hashable, Identifiable {
     let isActive: Bool
     let hasFullscreenWindows: Bool
     var systemImageName: String? {
+        // Projects are always rendered as text, even a single-letter project name
+        if type == .project { return nil }
         // System image type is only valid for numbers 0 to 50 and single capital char workspace name
         switch Int(name) {
             case let number?: if !(0 ... 50).contains(number) { return nil }
@@ -101,6 +115,7 @@ struct TrayItem: Hashable, Identifiable {
         let lowercasedName = name.lowercased()
         return switch type {
             case .mode: "\(lowercasedName).circle"
+            case .project: nil
             case .workspace where isActive: "\(lowercasedName).square.fill"
             case .workspace: "\(lowercasedName).square"
         }

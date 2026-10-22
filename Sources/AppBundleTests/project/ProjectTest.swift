@@ -263,6 +263,23 @@ final class ProjectTest: XCTestCase {
         assertEquals(getNextPrevProject([], current: nil, .next, wrapAround: true), .failure("The list of projects is empty"))
     }
 
+    func testTrayShowsActiveProject() {
+        setUpProjectsConfig()
+        activeProjectName = "anna"
+        updateTrayText()
+        assertEquals(TrayMenuModel.shared.trayText, "ANNA ┃ " + focus.workspace.name)
+        assertEquals(TrayMenuModel.shared.trayItems.first, TrayItem(type: .project, name: "ANNA", isActive: true, hasFullscreenWindows: false))
+        assertNil(TrayMenuModel.shared.trayItems.first?.systemImageName)
+        assertEquals(TrayMenuModel.shared.projects.map(\.name), ["anna", "bob", "company"])
+        assertEquals(TrayMenuModel.shared.projects.filter(\.isActive).map(\.name), ["anna"])
+
+        activeProjectName = nil
+        updateTrayText()
+        assertEquals(TrayMenuModel.shared.trayText, focus.workspace.name)
+        assertEquals(TrayMenuModel.shared.trayItems.map(\.type), [.workspace])
+        assertEquals(TrayMenuModel.shared.projects.filter(\.isActive), [])
+    }
+
     func testProjectFilterAndListProjects() {
         setUpProjectsConfig()
         activeProjectName = "anna"

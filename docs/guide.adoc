@@ -729,6 +729,9 @@ alt-q = 'project-quit'
 alt-g = 'move-app-to-project --none'
 ----
 
+* The active project is shown in the menu bar before the workspace names (e.g. `ANNA ┃ w`), and the menu bar menu
+lists the projects to switch between.
+A short HUD with the project name appears on the focused monitor after every switch.
 * Ownership is decided per process (PID) once, and recomputed on `reload-config`.
 Every window of a process belongs to the project of the process.
 * `%{app-args}` is the process command line (`argv` joined with spaces).

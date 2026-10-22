@@ -284,6 +284,9 @@ extension Window {
 }
 
 @MainActor func onProjectChanged(prev: String?, new: String?) async {
+    if !isUnitTest {
+        ProjectToastPanel.shared.show(new ?? "No project", on: focus.workspace.workspaceMonitor)
+    }
     broadcastEvent(.projectChanged(project: new, prevProject: prev))
     _ = await config.onProjectChanged.run(CmdEnv.defaultEnv.withEnvVars(getProjectChangedEnvVars(prev: prev, new: new)), CmdIoImpl.emptyStdinIgnoringOut)
 }

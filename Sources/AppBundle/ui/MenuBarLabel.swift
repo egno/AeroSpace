@@ -52,9 +52,8 @@ struct MenuBarLabel: View {
                         otherWorkspaces(with: workspaces)
                     }
                 case .i3Ordered:
-                    let modeItem = viewModel.trayItems.first { $0.type == .mode }
-                    if let modeItem {
-                        itemView(for: modeItem)
+                    ForEach(viewModel.trayItems.filter { $0.type == .mode || $0.type == .project }, id: \.id) { item in
+                        itemView(for: item)
                         modeSeparator(with: .monospaced)
                     }
                     let orderedWorkspaces = viewModel.workspaces.filter { !$0.isEffectivelyEmpty || $0.isVisible }
@@ -81,7 +80,7 @@ struct MenuBarLabel: View {
     private var squares: some View {
         ForEach(viewModel.trayItems, id: \.id) { item in
             itemView(for: item)
-            if item.type == .mode {
+            if item.type == .mode || item.type == .project {
                 modeSeparator(with: .monospaced)
             }
         }

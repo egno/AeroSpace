@@ -26,6 +26,21 @@ public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it 
                 }
                 Divider()
             }
+            if let token: RunSessionGuard = .isServerEnabled, !viewModel.projects.isEmpty {
+                Text("Projects:")
+                ForEach(viewModel.projects + [ProjectViewModel(name: "", isActive: !viewModel.projects.contains(where: \.isActive))], id: \.name) { project in
+                    Button {
+                        Task.startUnstructured {
+                            try await runLightSession(.menuBarButton, token) { await switchProject(to: project.name.takeIf { !$0.isEmpty }) }
+                        }
+                    } label: {
+                        Toggle(isOn: .constant(project.isActive)) {
+                            Text(project.name.isEmpty ? "No project" : project.name).font(.system(.body, design: .monospaced))
+                        }
+                    }
+                }
+                Divider()
+            }
             if let token: RunSessionGuard = .isServerEnabled {
                 Text("Workspaces:")
                 ForEach(viewModel.workspaces, id: \.name) { workspace in
