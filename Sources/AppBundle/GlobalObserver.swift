@@ -12,6 +12,9 @@ enum GlobalObserver {
         let nsApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
         Task.startUnstructured { @MainActor in
             if !TrayMenuModel.shared.isEnabled { return }
+            if notifName == NSWorkspace.didTerminateApplicationNotification.rawValue {
+                onAppTerminated()
+            }
             if let nsApp, notifName == NSWorkspace.didActivateApplicationNotification.rawValue || notifName == NSWorkspace.didUnhideApplicationNotification.rawValue,
                try await handleInactiveProjectActivation(nsApp, .globalObserver(notifName))
             {

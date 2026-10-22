@@ -317,6 +317,24 @@ func getProjectChangedEnvVars(prev: String?, new: String?) -> [String: String] {
     [AEROSPACE_PROJECT: new ?? "", AEROSPACE_PREV_PROJECT: prev ?? ""]
 }
 
+/// When the frontmost app quits, macOS activates another app on its own, possibly an app (or a window) of an inactive
+/// project. Such activations aren't the user's choice, so they must not switch the project
+private let appTerminationActivationGracePeriod: TimeInterval = 1
+@MainActor private var lastAppTerminationDate: Date = .distantPast
+
+@MainActor func onAppTerminated() {
+    lastAppTerminationDate = .now
+}
+
+@MainActor func getInactiveProjectActivationPolicy() async -> InactiveProjectActivationPolicy {
+    if isUnitTest { return config.onInactiveProjectActivation }
+    // The activation of the next app may be delivered before the termination of the quit app
+    try? await Task.sleep(for: .milliseconds(150))
+    return Date.now.timeIntervalSince(lastAppTerminationDate) < appTerminationActivationGracePeriod
+        ? .rehide
+        : config.onInactiveProjectActivation
+}
+
 /// R4. A process of an inactive project got unhidden/activated externally (cmd-tab, Dock, notification click)
 /// Returns true if the event was handled
 @MainActor func handleInactiveProjectActivation(_ nsApp: NSRunningApplication, _ event: RefreshSessionEvent) async throws -> Bool {
@@ -330,13 +348,17 @@ func getProjectChangedEnvVars(prev: String?, new: String?) -> [String: String] {
     if isPerWindowProcess(app) { return false }
     guard let project = getProjectName(of: app), project != activeProjectName, !app.nsApp.isHidden else { return false }
     guard let token: RunSessionGuard = .isServerEnabled else { return false }
+    let policy = await getInactiveProjectActivationPolicy()
     try await runLightSession(event, token) {
-        switch config.onInactiveProjectActivation {
+        switch policy {
             case ._switch:
                 await switchProject(to: project, preferredPid: app.pid)
             case .rehide:
                 await applyProjectVisibility(ProjectVisibilityPlan(toUnhide: [], toHide: [app.pid]))
                 saveProjectState()
+                // Hiding the app makes macOS activate yet another app. Give the focus back to the active project
+                getFocusAfterProjectSwitch(activeProjectName, preferredPid: nil)?.focusWindow()
+                focus.windowOrNil?.nativeFocus()
         }
     }
     return true
