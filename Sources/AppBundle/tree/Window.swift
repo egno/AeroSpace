@@ -8,6 +8,8 @@ open class Window: TreeNode, Hashable {
     var isFullscreen: Bool = false
     var noOuterGapsInFullscreen: Bool = false
     var layoutReason: LayoutReason = .standard
+    /// Where the window was in the tiling tree before it entered ``LayoutReason/macos(prevParentKind:)`` state
+    var prevTilingBinding: PrevTilingBinding? = nil
 
     @MainActor
     init(id: UInt32, _ app: any AbstractApp, lastFloatingSize: CGSize?, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) {
@@ -34,6 +36,7 @@ open class Window: TreeNode, Hashable {
     func getTitle(_ cm: CancellationMode) async throws -> String { die("Not implemented") }
     func isMacosFullscreen(_ cm: CancellationMode) async throws -> Bool { false }
     func isMacosMinimized(_ cm: CancellationMode) async throws -> Bool { false } // todo replace with enum MacOsWindowNativeState { normal, fullscreen, invisible }
+    @MainActor func isMacosAppHidden() -> Bool { false }
     var isHiddenInCorner: Bool { die("Not implemented") }
     @MainActor func nativeFocus() { die("Not implemented") }
     func getAxRect(_ cm: CancellationMode) async throws -> Rect? { die("Not implemented") }
@@ -46,6 +49,19 @@ enum LayoutReason: Equatable {
     case standard
     /// Reason for the cur temp layout is macOS native fullscreen, minimize, or hide
     case macos(prevParentKind: NonLeafTreeNodeKind)
+}
+
+struct PrevTilingBinding {
+    weak var parent: TilingContainer? // The container may be normalized away while the window is hidden
+    let adaptiveWeight: CGFloat
+    let index: Int
+
+    init?(_ data: BindingData?) {
+        guard let data, let parent = data.parent as? TilingContainer else { return nil }
+        self.parent = parent
+        self.adaptiveWeight = data.adaptiveWeight
+        self.index = data.index
+    }
 }
 
 extension Window {
