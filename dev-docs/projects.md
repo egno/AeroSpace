@@ -213,6 +213,8 @@ apply `on-inactive-project-activation`:
 ## 5. Config sketch (syntax not final)
 
 ```toml
+on-inactive-project-activation = 'switch' # top-level keys before any [table]
+
 # `--` lets the rhs of `test` start with a dash
 [project-apps.chrome]  # shared
 if = 'test %{app-bundle-id} = com.google.Chrome && test %{app-args} ~= -- "--user-data-dir=.*/\.chrome/{project}( |$)"'
@@ -244,8 +246,6 @@ apps = ['chrome', 'kitty', { app = 'cursor', open = ['~/src/bob-app'] }]
 name = 'company'
 apps = ['chrome', 'firefox', { app = 'kitty', autostart = false }, { app = 'cursor', open = ['~/src/company-infra'] }]
 link-browser = 'chrome'
-
-on-inactive-project-activation = 'switch'
 
 [mode.main.binding]
 alt-p = 'project next --wrap-around'

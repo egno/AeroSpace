@@ -678,6 +678,14 @@ regardless of the active project.
 
 [source,toml]
 ----
+# Top-level keys must come before any [table] / [[projects]]: TOML assigns keys that follow a table to that table
+# What to do when a process of an inactive project gets activated from outside (cmd-tab, Dock, notification click)
+# 'switch' (default) switches to the project. 'rehide' hides the process again
+on-inactive-project-activation = 'switch'
+
+# AEROSPACE_PROJECT and AEROSPACE_PREV_PROJECT env variables contain the new and the previous project (empty for none)
+on-project-changed = 'exec-and-forget sketchybar --trigger aerospace_project_change PROJECT=$AEROSPACE_PROJECT'
+
 # App definitions. 'if' uses the same syntax as 'on-window-detected', but only 'test', 'test-not', 'true', 'false'
 # commands and %{app-*} variables are allowed, because the matcher is evaluated against a process, not a window.
 # {project} is substituted with the project name.
@@ -710,13 +718,6 @@ name = 'company'
 # autostart = false: 'project-launch' and 'project --launch-missing' don't launch the app (default: true)
 apps = ['chrome', 'firefox', { app = 'kitty', autostart = false }]
 link-browser = 'chrome' # Defaults to 'chrome' if the project references it
-
-# What to do when a process of an inactive project gets activated from outside (cmd-tab, Dock, notification click)
-# 'switch' (default) switches to the project. 'rehide' hides the process again
-on-inactive-project-activation = 'switch'
-
-# AEROSPACE_PROJECT and AEROSPACE_PREV_PROJECT env variables contain the new and the previous project (empty for none)
-on-project-changed = 'exec-and-forget sketchybar --trigger aerospace_project_change PROJECT=$AEROSPACE_PROJECT'
 
 [mode.main.binding]
 alt-p = 'project next --wrap-around'
