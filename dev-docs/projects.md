@@ -1,6 +1,6 @@
 # Projects: design & requirements
 
-Status: draft v3 (requirements agreed, spikes pending)
+Status: v3. Spikes S1–S5 done. M1 (core) and M2 (lifecycle) implemented, M3 (router) pending.
 
 ## 1. Problem
 
@@ -82,6 +82,8 @@ MUST unless marked SHOULD/MAY.
 
 - **R1.1** App definitions (`[project-apps.<id>]`) are declared once and referenced by projects.
   Each has a matcher (`if`, same syntax as `on-window-detected`) and an optional `launch` shell command.
+  Optional `bundle-id` and `global-launch` serve R5.1b (`global-launch` requires `bundle-id` and must not contain
+  `{project}`).
 - **R1.2** Two kinds of app definitions:
   - **Shared**: matcher/launch contain the `{project}` placeholder. Each project referencing it gets its own instance.
   - **Whole-app**: no placeholder. All processes of the app belong to the single project that references it.
@@ -89,7 +91,8 @@ MUST unless marked SHOULD/MAY.
 - **R1.3** Projects are an ordered array (`[[projects]]`), which defines `project next|prev` order.
 - **R1.4** Project names match `[a-z0-9_-]+` so that `{project}` substitution is regex- and shell-safe.
 - **R1.5** Each project entry may override per-app options, at least `autostart` (R5.2) and `open`:
-  a list of items (e.g. repo folders) substituted into the launch command as `{open}`.
+  a list of items (e.g. repo folders) substituted into the launch command as `{open}`
+  (shell-quoted, space-separated, leading `~` expanded to `$HOME`). `open` without `{open}` in `launch` is a config error.
   Example: Anna's Cursor opens `~/src/anna-api` and `~/src/anna-web`, one window per folder, all owned by `anna`.
 - **R1.6** Each project declares a `link-browser` (app id) used by the router (R6). Defaults to `chrome` if referenced.
 - **R1.7** Match conflict resolution: a shared (argument-specific) match beats a whole-app match;
@@ -104,7 +107,9 @@ MUST unless marked SHOULD/MAY.
 - **R2.3** A process is matched once on app registration (launch or AeroSpace startup); the result is cached per PID
   and recomputed on `reload-config`.
 - **R2.4** SHOULD: `move-app-to-project <project|--none> [--pid <pid>]` manual override for processes no rule matches.
-  Lives until the process exits.
+  Lives until the process exits. ✅ M2: the override beats config rules (also for matched processes), survives
+  `reload-config` and AeroSpace restarts (state file, validated by pid + argv), is dropped when its project is removed
+  from the config, and re-applies visibility immediately.
 
 ### R3. Switching
 
@@ -140,21 +145,37 @@ apply `on-inactive-project-activation`:
 
 ### R5. Lifecycle
 
-- **R5.1** `project-launch [--project <name>] [--app <id>]...`: start missing instances of a project
+- **R5.1** `project-launch [--project <name>] [--app <id>...]`: start missing instances of a project
   (default: active project). With `--app` and the instance already running: focus its MRU window
   ("launch or focus"). Exit code 1 if the project has no such app, so bindings can fall back to global:
   `alt-enter = 'project-launch --app kitty || exec-and-forget open -na kitty'`.
-- **R5.1a** `project-launch --app <id> --open <item>` opens an extra item in the project's instance
+  Note (M2): that binding doesn't parse: `exec-and-forget` is only recognized as the first command of a binding
+  ("Unrecognized subcommand 'exec-and-forget'"). Working form: `'exec-and-forget aerospace project-launch --app kitty || open -na kitty'`.
+  ✅ M2, with these decisions:
+  - Syntax is `--app <id>...` / `--open <item>...` (space-separated values after one flag, like
+    `list-windows --workspace <ws>...`): the CLI parser rejects repeated flags.
+  - Failure exit code is 2 (`BinaryExitCode.fail`, used by every AeroSpace command, incl. M1 `project`). `||` works the same.
+  - Without `--app`: apps without `launch` are skipped. With `--app`: an app without `launch` is an error.
+  - "Instance" = processes owned by the project that match the app's matcher.
+  - Running instance of an **inactive** project (`--project`): switch to the project, focusing that app (like R4 `switch`).
+  - Running instance without a focusable window (e.g. all windows closed or minimized): run `launch`.
+  - MRU per instance: a global MRU list of window ids (last 100) maintained next to the per-project MRU.
+  - All checks run before any side effect (one unknown `--app` launches nothing).
+- **R5.1a** ✅ `project-launch --app <id> --open <item>...` (exactly one `--app`) opens extra items in the project's instance
   (e.g. a third repo in Anna's Cursor: `cursor --user-data-dir ~/.cursor-projects/anna <folder>` reuses the running instance).
   Cursor restores its previous windows on restart, so `open` mainly matters for the first start.
-- **R5.1b** With no active project, `project-launch --app <id>` targets the **global** instance of that app: the process
-  with the app's bundle ID that matches no project. Focus its MRU window if running, otherwise run the app definition's
+- **R5.1b** ✅ With no active project, `project-launch --app <id>` targets the **global** instance of that app: the process
+  with the app's bundle ID (explicit `bundle-id` key, not derived from the matcher) that matches no project. Focus its MRU window if running, otherwise run the app definition's
   `global-launch` command (e.g. `open -na "Google Chrome"`). Never activate by bundle ID (`osascript … activate`,
   `open -a`): with several instances running it picks an arbitrary one.
-- **R5.2** Per-app `autostart` (default `true`). `project <name> --launch-missing` starts only `autostart` apps.
+- **R5.2** ✅ Per-app `autostart` (default `true`). `project <name> --launch-missing` starts only `autostart` apps.
   `company.kitty` is `autostart = false` (on demand).
-- **R5.3** SHOULD: `project-quit <name>` gracefully quits all instances of a project (Herdr sessions survive).
-- **R5.4** `launch` commands get `AEROSPACE_PROJECT=<name>` in the environment.
+- **R5.3** ✅ SHOULD: `project-quit [<name>]` gracefully quits all instances of a project (Herdr sessions survive).
+  `NSRunningApplication.terminate()` for every process owned by the project (default: active). No force-kill.
+  The active project stays active. Processes of an inactive project are not unhidden first, so quit confirmations
+  (e.g. Chrome "close N tabs?") stay invisible until the project is activated.
+- **R5.4** ✅ `launch` commands get `AEROSPACE_PROJECT=<name>` in the environment (empty for `global-launch`).
+  They don't get `AEROSPACE_WINDOW_ID`/`AEROSPACE_WORKSPACE`: the launched app would inherit them.
 
 ### R6. Link routing
 
@@ -176,7 +197,10 @@ apply `on-inactive-project-activation`:
 - **R7.1** `list-projects [--active] [--format ...] [--json]`: `%{project-name}`, `%{project-is-active}`,
   per-app running state.
 - **R7.2** `list-windows --project <name|--none|--active>`, `list-apps --project ...`.
+  `list-windows --project` alone implies `--monitor all` (M2).
 - **R7.3** `subscribe` event `project-changed` and config callback `on-project-changed` (sketchybar etc.).
+  `on-project-changed` commands get `AEROSPACE_PROJECT` and `AEROSPACE_PREV_PROJECT` env variables (empty for none) (M2).
+  `subscribe` streams JSON events and runs no commands, so it needs no env variables.
 
 ### R8. Non-functional
 
@@ -189,16 +213,19 @@ apply `on-inactive-project-activation`:
 ## 5. Config sketch (syntax not final)
 
 ```toml
+# `--` lets the rhs of `test` start with a dash
 [project-apps.chrome]  # shared
-if = 'test %{app-bundle-id} = com.google.Chrome && test %{app-args} ~= "--user-data-dir=.*/\.chrome/{project}( |$)"'
+if = 'test %{app-bundle-id} = com.google.Chrome && test %{app-args} ~= -- "--user-data-dir=.*/\.chrome/{project}( |$)"'
 launch = 'open -na "Google Chrome" --args --user-data-dir="$HOME/.chrome/{project}"'
+bundle-id = 'com.google.Chrome'             # R5.1b: finds the global (personal) Chrome
+global-launch = 'open -na "Google Chrome"'  # R5.1b: no active project and no global Chrome running
 
 [project-apps.kitty]   # shared
-if = 'test %{app-bundle-id} = net.kovidgoyal.kitty && test %{app-args} ~= "--instance-group[= ]{project}( |$)"'
+if = 'test %{app-bundle-id} = net.kovidgoyal.kitty && test %{app-args} ~= -- "--instance-group[= ]{project}( |$)"'
 launch = 'kitty --single-instance --instance-group {project} herdr --session {project}'
 
 [project-apps.cursor]  # shared; several windows (repos) per instance
-if = 'test %{app-bundle-id} = com.todesktop.230313mzl4w4u92 && test %{app-args} ~= "--user-data-dir[= ].*/\.cursor-projects/{project}( |$)"'
+if = 'test %{app-bundle-id} = com.todesktop.230313mzl4w4u92 && test %{app-args} ~= -- "--user-data-dir[= ].*/\.cursor-projects/{project}( |$)"'
 launch = 'cursor --user-data-dir ~/.cursor-projects/{project} {open}'  # not `open -na`, see S5
 
 [project-apps.firefox] # whole app
@@ -223,8 +250,8 @@ on-inactive-project-activation = 'switch'
 [mode.main.binding]
 alt-p = 'project next --wrap-around'
 alt-shift-p = 'project-back-and-forth'
-alt-enter = 'project-launch --app kitty || exec-and-forget open -na kitty'
-alt-b = 'project-launch --app chrome || exec-and-forget open -a "Google Chrome"'
+alt-enter = 'exec-and-forget aerospace project-launch --app kitty || open -na kitty'  # see R5.1 note
+alt-b = 'project-launch --app chrome'  # no active project -> the global Chrome (R5.1b)
 ```
 
 ## 6. Implementation notes
@@ -306,9 +333,10 @@ alt-b = 'project-launch --app chrome || exec-and-forget open -a "Google Chrome"'
 ## 8. Milestones
 
 1. **M0** Spikes S1–S4.
-2. **M1 Core**: config + validation, `%{app-args}`/`%{app-project}`, ownership, `project` switching (R3), R4 `switch`/`rehide`,
+2. **M1 Core** ✅: config + validation, `%{app-args}`/`%{app-project}`, ownership, `project` switching (R3), R4 `switch`/`rehide`,
    state persistence, `list-projects`, `project-changed`, tests, docs.
-3. **M2 Lifecycle**: `project-launch`, `autostart`, `--launch-missing`, `project-quit`, `move-app-to-project`.
+3. **M2 Lifecycle** ✅: `project-launch`, `autostart`, `--launch-missing`, `project-quit`, `move-app-to-project`.
+   Plus: `bundle-id`, env variables for `on-project-changed`, `test … -- <rhs>`, `list-windows --project` alone.
 4. **M3 Router**: URL router tool + `list-apps --pid`.
 
 ## 8a. Key map (user config, after M1/M2 land)

@@ -1,6 +1,7 @@
 import Common
 
 let projectPlaceholder = "{project}"
+let openPlaceholder = "{open}"
 
 /// `[project-apps.<id>]`
 struct ProjectAppDef: ConvenienceMutable, Equatable {
@@ -8,6 +9,8 @@ struct ProjectAppDef: ConvenienceMutable, Equatable {
     var rawIf: String? = nil
     var launch: String? = nil
     var globalLaunch: String? = nil
+    /// Used to find the global instance of the app (a process with this bundle ID that matches no project)
+    var bundleId: String? = nil
 
     /// Shared app definitions contain `{project}` placeholder in their matcher.
     /// Each project that references a shared definition gets its own instance.
@@ -53,6 +56,7 @@ private let projectAppDefParser: [String: any ParserProtocol<ProjectAppDef>] = [
     "if": Parser(\.rawIf, { raw, backtrace in parseString(raw, backtrace).map(Optional.init) }),
     "launch": Parser(\.launch, { raw, backtrace in parseString(raw, backtrace).map(Optional.init) }),
     "global-launch": Parser(\.globalLaunch, { raw, backtrace in parseString(raw, backtrace).map(Optional.init) }),
+    "bundle-id": Parser(\.bundleId, parseBundleId),
 ]
 
 private let rawProjectParser: [String: any ParserProtocol<RawProject>] = [
@@ -79,6 +83,12 @@ func parseProjectAppDefs(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: 
         if def.rawIf == nil {
             c.errors.append(.init(backtrace, "'if' is mandatory key"))
             continue
+        }
+        if def.globalLaunch?.contains(projectPlaceholder) == true {
+            c.errors.append(.init(backtrace + .key("global-launch"), "'global-launch' must not contain \(projectPlaceholder) placeholder"))
+        }
+        if def.globalLaunch != nil && def.bundleId == nil {
+            c.errors.append(.init(backtrace + .key("global-launch"), "'global-launch' requires 'bundle-id'. It's used to find the running global instance"))
         }
         result[id] = def
     }
@@ -116,6 +126,14 @@ private func parseRawProjectAppRefs(_ raw: OrderedJson, _ backtrace: ConfigBackt
         }
     }
     return result
+}
+
+private func parseBundleId(_ raw: OrderedJson, _ backtrace: ConfigBacktrace) -> ResOrConfigParseDiagnostic<String?> {
+    parseString(raw, backtrace).flatMap { bundleId in
+        !bundleId.isEmpty && !bundleId.contains(where: { $0.isWhitespace })
+            ? .success(bundleId)
+            : .failure(.init(backtrace, "Invalid bundle ID '\(bundleId)'. It must be non-empty and must not contain whitespaces"))
+    }
 }
 
 private func parseProjectArrayOfStrings(_ raw: OrderedJson, _ backtrace: ConfigBacktrace) -> ResOrConfigParseDiagnostic<[String]> {
@@ -177,6 +195,9 @@ func resolveProjects(
                     // Report the error only once per app definition
                     if appIdsWithInvalidMatcher.insert(appId).inserted { c.errors.append(.init(ifBacktrace, msg)) }
                     continue
+            }
+            if !ref.open.isEmpty && def.launch?.contains(openPlaceholder) != true {
+                c.errors.append(.init(backtrace + .key("open"), "'open' requires \(openPlaceholder) placeholder in 'launch' of [project-apps.\(appId)]"))
             }
             apps.append(ProjectApp(
                 appId: appId,

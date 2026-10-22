@@ -65,8 +65,9 @@ extension ListWindowsCmdArgs {
 func parseListWindowsCmdArgs(_ args: StrArrSlice) -> ParsedCmd<ListWindowsCmdArgs> {
     let args = args.map { $0 == "--app-id" ? "--app-bundle-id" : $0 }.slice // Compatibility
     return parseSpecificCmdArgs(ListWindowsCmdArgs(commonState: .init(args)), args)
-        .filter("Mandatory option is not specified (--focused|--all|--monitor|--workspace)") { raw in
-            raw.filteringOptions.focused || raw.allAlias || !raw.filteringOptions.monitors.isEmpty || !raw.filteringOptions.workspaces.isEmpty
+        .filter("Mandatory option is not specified (--focused|--all|--monitor|--workspace|--project)") { raw in
+            raw.filteringOptions.focused || raw.allAlias || !raw.filteringOptions.monitors.isEmpty || !raw.filteringOptions.workspaces.isEmpty ||
+                raw.filteringOptions.projectFilter != nil
         }
         .filter("--all conflicts with \"filtering\" flags. Please use '--monitor all' instead of '--all' alias") { raw in
             raw.allAlias.implies(raw.filteringOptions == ListWindowsCmdArgs.FilteringOptions())
@@ -76,6 +77,11 @@ func parseListWindowsCmdArgs(_ args: StrArrSlice) -> ParsedCmd<ListWindowsCmdArg
         }
         .map { raw in
             raw.allAlias ? raw.copy(\.filteringOptions.monitors, [.all]).copy(\.allAlias, false) : raw // Normalize alias
+        }
+        .map { raw in
+            // --project alone implies all monitors
+            let o = raw.filteringOptions
+            return o.projectFilter != nil && !o.focused && o.monitors.isEmpty && o.workspaces.isEmpty ? raw.copy(\.filteringOptions.monitors, [.all]) : raw
         }
         .flatMap { if $0.json, let msg = getErrorIfFormatIsIncompatibleWithJson($0._format) { .failure(msg) } else { .cmd($0) } }
 }

@@ -14,6 +14,7 @@ public struct TestCmdArgs: CmdArgs {
         posArgs: [
             newMandatoryPosArgParser(\.lhs, parseTestLhs, placeholder: "<lhs>"),
             newMandatoryPosArgParser(\.infixOperator, parseTestInfixOperator, placeholder: "<operator>"),
+            ArgParser(\.noopKeyPath, parseTestRhsDashDash),
             newMandatoryPosArgParser(\.rhs, parseTestRhs, placeholder: "<rhs>"),
         ],
     )
@@ -32,6 +33,12 @@ func parseTestRhs(_ input: PosArgParserInput) -> ParsedCliArgs<String> {
         }
     }
     return .init(result, advanceBy: 1)
+}
+
+/// `--` before <rhs> allows <rhs> that starts with a dash: `test %{app-args} ~= -- --user-data-dir`.
+/// `--` that is the last argument is the <rhs> itself (backwards compatibility)
+func parseTestRhsDashDash(_ input: PosArgParserInput) -> ParsedCliArgs<()> {
+    .succ((), advanceBy: input.arg == "--" && input.getOrNil(relativeIndex: 1) != nil ? 1 : 0)
 }
 
 func parseTestLhs(_ input: PosArgParserInput) -> ParsedCliArgs<FormatVar> {

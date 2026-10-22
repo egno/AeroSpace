@@ -9,8 +9,8 @@ include::util/man-attributes.adoc[]
 == Synopsis
 [verse]
 // tag::synopsis[]
-aerospace project [-h|--help] <project-name>
-aerospace project [-h|--help] [--wrap-around] (next|prev)
+aerospace project [-h|--help] [--launch-missing] <project-name>
+aerospace project [-h|--help] [--wrap-around] [--launch-missing] (next|prev)
 aerospace project [-h|--help] --none
 
 // end::synopsis[]
@@ -40,7 +40,7 @@ Only global processes stay visible.
 
 The active project is preserved across AeroSpace restarts.
 
-Also see: <<project-back-and-forth, project-back-and-forth>>, <<list-projects, list-projects>>
+Also see: <<project-back-and-forth, project-back-and-forth>>, <<list-projects, list-projects>>, <<project-launch, project-launch>>
 // end::body[]
 
 // =========================================================== Options
@@ -49,6 +49,9 @@ include::util/conditional-options-header.adoc[]
 -h, --help:: Print help
 --wrap-around:: Make it possible to jump between first and last projects using `(next|prev)`
 --none:: Deactivate the active project. Hide the processes of all projects
+--launch-missing::
+After the switch, launch the apps of the target project that have `autostart = true` and aren't running.
+The same as `project-launch` without `--app`
 
 // =========================================================== Arguments
 include::./util/conditional-arguments-header.adoc[]

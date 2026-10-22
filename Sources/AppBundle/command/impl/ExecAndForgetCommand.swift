@@ -7,11 +7,15 @@ struct ExecAndForgetCommand: Command {
 
     func run(_ env: CmdEnv, _ io: CmdIo) -> BinaryExitCode {
         // todo shall exec-and-forget fork exec session?
-        // It doesn't throw if exit code is non-zero
-        let process = Process()
-        process.environment = config.execConfig.envVariables + env.asMap
-        process.executableURL = URL(filePath: "/bin/bash")
-        process.arguments = ["-c", args.bashScript]
-        return .from(bool: Result { try process.run() }.isSuccess)
+        .from(bool: execAndForget(args.bashScript, env: env.asMap))
     }
+}
+
+/// It doesn't throw if exit code is non-zero
+@MainActor func execAndForget(_ bashScript: String, env: [String: String]) -> Bool {
+    let process = Process()
+    process.environment = config.execConfig.envVariables + env
+    process.executableURL = URL(filePath: "/bin/bash")
+    process.arguments = ["-c", bashScript]
+    return Result { try process.run() }.isSuccess
 }

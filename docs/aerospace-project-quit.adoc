@@ -1,0 +1,41 @@
+= aerospace-project-quit(1)
+include::util/man-attributes.adoc[]
+:manname: aerospace-project-quit
+// tag::purpose[]
+:manpurpose: Gracefully quit all processes of a project
+// end::purpose[]
+
+// =========================================================== Synopsis
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace project-quit [-h|--help] [<project-name>]
+
+// end::synopsis[]
+
+// =========================================================== Description
+== Description
+
+// tag::body[]
+{manpurpose}
+
+The command asks every process that belongs to the project to quit, the same way as `cmd-q` does.
+Processes are never force-killed. Apps may ask for confirmation (e.g. unsaved changes).
+
+If the project is active, it stays active.
+
+Also see: <<project-launch, project-launch>>
+// end::body[]
+
+// =========================================================== Options
+include::util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+
+// =========================================================== Arguments
+include::./util/conditional-arguments-header.adoc[]
+
+<project-name>:: The project to quit. The active project by default
+
+// =========================================================== Footer
+include::util/man-footer.adoc[]

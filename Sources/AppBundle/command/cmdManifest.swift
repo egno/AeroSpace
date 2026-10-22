@@ -62,6 +62,8 @@ extension CmdArgs {
                 command = ModeCommand(args: self as! ModeCmdArgs)
             case .move:
                 command = MoveCommand(args: self as! MoveCmdArgs)
+            case .moveAppToProject:
+                command = MoveAppToProjectCommand(args: self as! MoveAppToProjectCmdArgs)
             case .moveMouse:
                 command = MoveMouseCommand(args: self as! MoveMouseCmdArgs)
             case .moveNodeToMonitor:
@@ -74,6 +76,10 @@ extension CmdArgs {
                 command = ProjectCommand(args: self as! ProjectCmdArgs)
             case .projectBackAndForth:
                 command = ProjectBackAndForthCommand(args: self as! ProjectBackAndForthCmdArgs)
+            case .projectLaunch:
+                command = ProjectLaunchCommand(args: self as! ProjectLaunchCmdArgs)
+            case .projectQuit:
+                command = ProjectQuitCommand(args: self as! ProjectQuitCmdArgs)
             case .reloadConfig:
                 command = ReloadConfigCommand(args: self as! ReloadConfigCmdArgs)
             case .resize:

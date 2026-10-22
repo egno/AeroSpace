@@ -7,7 +7,7 @@ final class ListWindowsTest: XCTestCase {
     override func setUp() async throws { setUpWorkspacesForTests() }
 
     func testParse() {
-        assertEquals(parseCommand("list-windows --pid 1").errorOrNil, "Mandatory option is not specified (--focused|--all|--monitor|--workspace)")
+        assertEquals(parseCommand("list-windows --pid 1").errorOrNil, "Mandatory option is not specified (--focused|--all|--monitor|--workspace|--project)")
         assertNil(parseCommand("list-windows --workspace M --pid 1").errorOrNil)
         assertEquals(parseCommand("list-windows --pid 1 --focused").errorOrNil, "--focused conflicts with other \"filtering\" flags")
         assertEquals(parseCommand("list-windows --pid 1 --all").errorOrNil, "--all conflicts with \"filtering\" flags. Please use '--monitor all' instead of '--all' alias")

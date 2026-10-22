@@ -1,0 +1,73 @@
+= aerospace-project-launch(1)
+include::util/man-attributes.adoc[]
+:manname: aerospace-project-launch
+// tag::purpose[]
+:manpurpose: Launch the apps of a project, or focus the already running ones
+// end::purpose[]
+
+// =========================================================== Synopsis
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace project-launch [-h|--help] [--project <project-name>]
+aerospace project-launch [-h|--help] [--project <project-name>] --app <app-id>... [--open <item>...]
+
+// end::synopsis[]
+
+// =========================================================== Description
+== Description
+
+// tag::body[]
+{manpurpose}
+
+The command targets the active project, or the project specified with `--project`.
+Apps are declared in the config with `[project-apps.<app-id>]`.
+See xref:guide.adoc#projects[Projects] section in the guide.
+
+* Without `--app`, the command runs the `launch` command of every app of the project that has `autostart = true`
+(the default) and whose instance isn't running.
+Apps without `launch` command are skipped.
+* With `--app`, if the instance of the app is running, its most recently used window gets focus ("launch or focus").
+If the project is not active, the command switches to the project first.
+If the instance is running but has no window that can get focus, the `launch` command is run.
+If the instance isn't running, the `launch` command is run.
+* With `--app` and `--open`, the `launch` command is run with the specified items even if the instance is running.
+Apps such as Chrome or Cursor forward the items to the running instance.
+
+`launch` commands are run with `bash -c`.
+`{open}` placeholder in the `launch` command is substituted with shell-quoted, space-separated items:
+the items of `--open`, or, if `--open` isn't specified, the items of `open` option of the app in the project config.
+A leading `~` in the items is expanded to the home directory
+(`~` is a reserved character in AeroSpace command syntax, quote such items in bindings: `+--open '~/src/x'+`).
+If the `launch` command doesn't contain `{open}` placeholder, `--open` is an error.
+`launch` commands get `AEROSPACE_PROJECT` environment variable with the project name.
+
+If no project is active and `--project` isn't specified, `--app` targets the *global* instance of the app:
+the process with the app's `bundle-id` that doesn't belong to any project.
+If it's running, its most recently used window gets focus.
+Otherwise, the `global-launch` command of the app is run (`AEROSPACE_PROJECT` is empty).
+
+The command fails (exit code 2), if the project doesn't reference one of the `--app` apps.
+It allows falling back to something else in bindings.
+`exec-and-forget` must be the first command of a binding, so run the whole fallback chain in bash:
+
+[source,toml]
+----
+alt-enter = 'exec-and-forget aerospace project-launch --app kitty || open -na kitty'
+----
+
+Also see: <<project, project>>, <<project-quit, project-quit>>
+// end::body[]
+
+// =========================================================== Options
+include::util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+--project <project-name>:: The project to launch the apps of. The active project by default
+--app <app-id>...:: Space-separated list of app IDs (`[project-apps.<app-id>]`) to launch or focus
+--open <item>...::
+Space-separated list of items (e.g. folders) to substitute into `{open}` placeholder of the `launch` command.
+Requires exactly one `<app-id>` in `--app`
+
+// =========================================================== Footer
+include::util/man-footer.adoc[]

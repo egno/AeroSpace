@@ -9,6 +9,16 @@ private struct ProjectStateFile: Codable, Equatable {
     var hasPrevActiveProject: Bool = false
     /// Allows to recover apps hidden by AeroSpace if AeroSpace crashed
     var hiddenPids: [Int32] = []
+    /// move-app-to-project overrides. Optional for compatibility with older state files
+    var ownershipOverrides: [OwnershipOverride]? = nil
+
+    struct OwnershipOverride: Codable, Equatable {
+        let pid: Int32
+        /// nil means global
+        let project: String?
+        /// pid + argv identify the process. Pids are reused after reboot
+        let args: String?
+    }
 }
 
 private var projectStateFileUrl: URL {
@@ -27,6 +37,9 @@ private var projectStateFileUrl: URL {
         prevActiveProject: prevActiveProjectName ?? nil,
         hasPrevActiveProject: prevActiveProjectName != nil,
         hiddenPids: projectHiddenPids.sorted(),
+        ownershipOverrides: projectOwnershipOverrides.sorted(by: { $0.key < $1.key }).map { pid, ownership in
+            .init(pid: pid, project: ownership.projectName, args: getRunningApps().first(where: { $0.pid == pid })?.args)
+        },
     )
     guard let data = try? JSONEncoder.aeroSpaceDefault.encode(state) else { return }
     let url = projectStateFileUrl
@@ -44,6 +57,12 @@ private var projectStateFileUrl: URL {
     if state.hasPrevActiveProject {
         prevActiveProjectName = .some(state.prevActiveProject.flatMap { names.contains($0) ? $0 : nil })
     }
+    let runningApps = getRunningApps()
+    for o in state.ownershipOverrides ?? [] where o.project.map(names.contains) != false {
+        if let app = runningApps.first(where: { $0.pid == o.pid }), app.args == o.args {
+            setProjectOwnershipOverride(pid: o.pid, project: o.project)
+        }
+    }
     let projectPids = MacApp.allAppsMap.values.filter { getProjectName(of: $0) != nil }.map(\.pid).toSet()
     projectHiddenPids = Set(state.hiddenPids).intersection(projectPids)
     isProjectStateRestored = true
@@ -56,6 +75,9 @@ private var projectStateFileUrl: URL {
     if !isProjectStateRestored { return }
     if let prev = prevActiveProjectName ?? nil, !config.projects.contains(where: { $0.name == prev }) {
         prevActiveProjectName = nil
+    }
+    projectOwnershipOverrides = projectOwnershipOverrides.filter { _, ownership in
+        ownership.projectName.map { name in config.projects.contains(where: { $0.name == name }) } != false
     }
     if let active = activeProjectName, !config.projects.contains(where: { $0.name == active }) {
         activeProjectName = nil

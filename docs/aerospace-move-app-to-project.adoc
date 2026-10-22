@@ -1,0 +1,48 @@
+= aerospace-move-app-to-project(1)
+include::util/man-attributes.adoc[]
+:manname: aerospace-move-app-to-project
+// tag::purpose[]
+:manpurpose: Manually assign the application process to a project
+// end::purpose[]
+
+// =========================================================== Synopsis
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace move-app-to-project [-h|--help] [--pid <pid>] <project-name>
+aerospace move-app-to-project [-h|--help] [--pid <pid>] --none
+
+// end::synopsis[]
+
+// =========================================================== Description
+== Description
+
+// tag::body[]
+{manpurpose}
+
+The command overrides the ownership that `[project-apps.<id>]` matchers decided for the process of the focused window
+(or the process with `--pid`).
+All windows of the process belong to the new project.
+The override takes precedence over the config, survives `reload-config` and AeroSpace restarts,
+and lasts until the process exits.
+
+If the new project is not active, the process gets hidden.
+If the process was hidden by project switching and the new project is active (or `--none`), the process gets unhidden.
+
+Also see: <<project, project>>
+// end::body[]
+
+// =========================================================== Options
+include::util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+--pid <pid>:: The process to move. The process of the focused window by default
+--none:: Make the process global (it doesn't belong to any project)
+
+// =========================================================== Arguments
+include::./util/conditional-arguments-header.adoc[]
+
+<project-name>:: The project to move the process to
+
+// =========================================================== Footer
+include::util/man-footer.adoc[]

@@ -9,8 +9,8 @@ include::util/man-attributes.adoc[]
 == Synopsis
 [verse]
 // tag::synopsis[]
-aerospace test-not [-h|--help] <lhs> = <rhs>
-aerospace test-not [-h|--help] <lhs> ~= <rhs>
+aerospace test-not [-h|--help] <lhs> = [--] <rhs>
+aerospace test-not [-h|--help] <lhs> ~= [--] <rhs>
 
 // end::synopsis[]
 

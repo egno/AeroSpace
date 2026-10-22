@@ -203,6 +203,13 @@ include::aerospace-move.adoc[tags=synopsis]
 include::aerospace-move.adoc[tags=purpose]
 include::aerospace-move.adoc[tags=body]
 
+== move-app-to-project
+----
+include::aerospace-move-app-to-project.adoc[tags=synopsis]
+----
+include::aerospace-move-app-to-project.adoc[tags=purpose]
+include::aerospace-move-app-to-project.adoc[tags=body]
+
 == move-mouse
 ----
 include::./aerospace-move-mouse.adoc[tags=synopsis]
@@ -244,6 +251,20 @@ include::aerospace-project-back-and-forth.adoc[tags=synopsis]
 ----
 include::aerospace-project-back-and-forth.adoc[tags=purpose]
 include::aerospace-project-back-and-forth.adoc[tags=body]
+
+== project-launch
+----
+include::aerospace-project-launch.adoc[tags=synopsis]
+----
+include::aerospace-project-launch.adoc[tags=purpose]
+include::aerospace-project-launch.adoc[tags=body]
+
+== project-quit
+----
+include::aerospace-project-quit.adoc[tags=synopsis]
+----
+include::aerospace-project-quit.adoc[tags=purpose]
+include::aerospace-project-quit.adoc[tags=body]
 
 == reload-config
 ----

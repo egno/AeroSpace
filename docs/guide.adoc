@@ -681,43 +681,57 @@ regardless of the active project.
 # App definitions. 'if' uses the same syntax as 'on-window-detected', but only 'test', 'test-not', 'true', 'false'
 # commands and %{app-*} variables are allowed, because the matcher is evaluated against a process, not a window.
 # {project} is substituted with the project name.
+# `--` lets the right hand side of 'test' start with a dash
 [project-apps.chrome] # Shared. Every project that references it gets its own instance
-if = 'test %{app-bundle-id} = com.google.Chrome && test %{app-args} ~= " --user-data-dir=.*/\.chrome/{project}( |$)"'
-launch = 'open -na "Google Chrome" --args --user-data-dir="$HOME/.chrome/{project}"'
-global-launch = 'open -na "Google Chrome"'
+if = 'test %{app-bundle-id} = com.google.Chrome && test %{app-args} ~= -- "--user-data-dir=.*/\.chrome/{project}( |$)"'
+launch = 'open -na "Google Chrome" --args --user-data-dir="$HOME/.chrome/{project}"' # Used by 'project-launch'
+bundle-id = 'com.google.Chrome' # Used to find the global instance (the process that belongs to no project)
+global-launch = 'open -na "Google Chrome"' # 'project-launch --app chrome' when no project is active
 
 [project-apps.kitty]
-if = 'test %{app-bundle-id} = net.kovidgoyal.kitty && test %{app-args} ~= " --instance-group[= ]{project}( |$)"'
+if = 'test %{app-bundle-id} = net.kovidgoyal.kitty && test %{app-args} ~= -- "--instance-group[= ]{project}( |$)"'
 launch = 'kitty --single-instance --instance-group {project}'
+
+[project-apps.cursor] # {open} is substituted with shell-quoted items of 'open' (see below)
+if = 'test %{app-bundle-id} = com.todesktop.230313mzl4w4u92 && test %{app-args} ~= -- "--user-data-dir[= ].*/\.cursor-projects/{project}( |$)"'
+launch = 'cursor --user-data-dir ~/.cursor-projects/{project} {open}'
 
 [project-apps.firefox] # Whole app. All Firefox processes belong to the single project that references it
 if = 'test %{app-bundle-id} = org.mozilla.firefox'
+launch = 'open -a Firefox'
 
 # The order of [[projects]] defines 'project next|prev' order
 [[projects]]
 name = 'anna' # Must match [a-z0-9_-]+
-apps = ['chrome', 'kitty']
+apps = ['chrome', 'kitty', { app = 'cursor', open = ['~/src/anna-api', '~/src/anna-web'] }]
 
 [[projects]]
 name = 'company'
-apps = ['chrome', 'firefox', { app = 'kitty', autostart = false, open = [] }]
+# autostart = false: 'project-launch' and 'project --launch-missing' don't launch the app (default: true)
+apps = ['chrome', 'firefox', { app = 'kitty', autostart = false }]
 link-browser = 'chrome' # Defaults to 'chrome' if the project references it
 
 # What to do when a process of an inactive project gets activated from outside (cmd-tab, Dock, notification click)
 # 'switch' (default) switches to the project. 'rehide' hides the process again
 on-inactive-project-activation = 'switch'
 
-on-project-changed = 'exec-and-forget sketchybar --trigger aerospace_project_change'
+# AEROSPACE_PROJECT and AEROSPACE_PREV_PROJECT env variables contain the new and the previous project (empty for none)
+on-project-changed = 'exec-and-forget sketchybar --trigger aerospace_project_change PROJECT=$AEROSPACE_PROJECT'
 
 [mode.main.binding]
 alt-p = 'project next --wrap-around'
 alt-shift-p = 'project-back-and-forth'
+alt-1 = 'project anna --launch-missing'
+# Focus the kitty of the active project, or launch it. Fall back if the project doesn't have kitty
+alt-enter = 'exec-and-forget aerospace project-launch --app kitty || open -na kitty'
+alt-q = 'project-quit'
+alt-g = 'move-app-to-project --none'
 ----
 
 * Ownership is decided per process (PID) once, and recomputed on `reload-config`.
 Every window of a process belongs to the project of the process.
 * `%{app-args}` is the process command line (`argv` joined with spaces).
-Since `test` treats arguments that start with `-` as flags, start the regex with a space: `" --user-data-dir=..."`.
+Since `test` treats arguments that start with `-` as flags, put `+--+` before the regex: `+test %{app-args} ~= -- "--user-data-dir=..."+`.
 * A whole-app definition (no `{project}` in `if`) can be referenced by only one project.
 * If a process matches a shared definition of one project and a whole-app definition of another project,
 the shared match wins. Other ties are reported as errors by `reload-config`, and the process is treated as global.
@@ -726,7 +740,16 @@ the shared match wins. Other ties are reported as errors by `reload-config`, and
 * `enable off` and quitting AeroSpace unhide all apps hidden by project switching.
 * The active project is stored in `$XDG_STATE_HOME/aerospace/projects.json` (`~/.local/state/aerospace/projects.json` by default)
 and restored on startup.
-* `autostart`, `open`, `launch` and `global-launch` are reserved for project launching commands, and are not used yet.
+* xref:commands.adoc#project-launch[project-launch] launches the apps of a project or focuses the running ones
+("launch or focus").
+With no active project, `project-launch --app <id>` targets the global instance of the app (`bundle-id`, `global-launch`).
+`project <name> --launch-missing` launches the missing `autostart` apps after the switch.
+Launch commands get `AEROSPACE_PROJECT` environment variable.
+* xref:commands.adoc#project-quit[project-quit] gracefully quits all processes of a project.
+* xref:commands.adoc#move-app-to-project[move-app-to-project] manually moves a process to another project (or makes it
+global) until the process exits.
+* `~` is a reserved character in the command syntax.
+Quote paths in bindings: `+project-launch --app cursor --open '~/src/x'+`.
 
 Use `%{app-project}` and `%{window-project}` interpolation variables, `list-windows --project`, `list-apps --project`,
 xref:commands.adoc#list-projects[list-projects] and `project-changed` xref:commands.adoc#subscribe[subscribe] event to
@@ -749,6 +772,10 @@ In practice:
 
 * For <<on-window-detected-callback>>, the target is the newly detected window, so `AEROSPACE_WINDOW_ID` is always set.
 * For <<on-focus-changed-callbacks>> (`on-focus-changed`, `on-focused-monitor-changed`), the target is the new focus, so `AEROSPACE_WINDOW_ID` is set when a window is focused, and `AEROSPACE_WORKSPACE` is set when focus lands on an empty workspace.
+
+`on-project-changed` callback (see <<projects>>) has no target window or workspace.
+It gets `AEROSPACE_PROJECT` and `AEROSPACE_PREV_PROJECT` environment variables instead:
+the new and the previous active project. The variable is empty if no project is active.
 
 Commands that need a target (xref:commands.adoc#layout[layout], xref:commands.adoc#move-node-to-workspace[move-node-to-workspace], xref:commands.adoc#move[move], etc.)
 honor the forwarded context before falling back to the currently focused window or workspace.

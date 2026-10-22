@@ -9,8 +9,8 @@ include::util/man-attributes.adoc[]
 == Synopsis
 [verse]
 // tag::synopsis[]
-aerospace test [-h|--help] <lhs> = <rhs>
-aerospace test [-h|--help] <lhs> ~= <rhs>
+aerospace test [-h|--help] <lhs> = [--] <rhs>
+aerospace test [-h|--help] <lhs> ~= [--] <rhs>
 
 // end::synopsis[]
 
@@ -34,6 +34,8 @@ Test if the application ID equals to Chrome: `aerospace test %{app-bundle-id} = 
 
 Test if the application name contains "chrome" (case insensitive): `aerospace test %{app-name} ~= chrome`
 
+Test if the process command line contains `--user-data-dir=` argument: `+aerospace test %{app-args} ~= -- --user-data-dir=+`
+
 // =========================================================== Arguments
 include::./util/conditional-arguments-header.adoc[]
 
@@ -44,6 +46,9 @@ The left hand side must be one of the interpolation variables (see below).
 <rhs>::
 An integer, a boolean (`true`/`false`), a regex, or just a plain string.
 The way the expression is interpreted depends on the type of `<lhs>` and the infix operator.
++
+If `<rhs>` starts with a dash, put `+--+` before it: `+test %{app-args} ~= -- --foo+`.
+Otherwise, it's parsed as a flag.
 
 // =========================================================== Interpolation Variables
 include::./util/conditional-interpolation-variables-header.adoc[]

@@ -7,6 +7,7 @@ public struct ProjectCmdArgs: CmdArgs {
         flags: [
             "--none": trueBoolFlag(\.none),
             "--wrap-around": trueBoolFlag(\.wrapAround),
+            "--launch-missing": trueBoolFlag(\.launchMissing),
         ],
         posArgs: [
             dashDashArg(mandatory: false),
@@ -14,12 +15,14 @@ public struct ProjectCmdArgs: CmdArgs {
         ],
         conflictingOptions: [
             ["--none", "--wrap-around"],
+            ["--none", "--launch-missing"],
         ],
     )
 
     public var _target: ProjectTarget? = nil
     fileprivate var none: Bool = false
     public var wrapAround: Bool = false
+    public var launchMissing: Bool = false
 }
 
 extension ProjectCmdArgs {
@@ -52,6 +55,10 @@ func parseProjectTarget(i: PosArgParserInput) -> ParsedCliArgs<ProjectTarget> {
         case ("prev", false): .succ(.relative(.prev), advanceBy: 1)
         default: .init(parseProjectName(i.arg).map(ProjectTarget.direct), advanceBy: 1)
     }
+}
+
+func parseProjectNamePosArg(i: PosArgParserInput) -> ParsedCliArgs<String> {
+    .init(parseProjectName(i.arg), advanceBy: 1)
 }
 
 /// Project names are used in regexes and shell commands via `{project}` substitution. Keep them safe

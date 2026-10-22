@@ -94,6 +94,9 @@ let list_windows_help_generated = """
                         [--pid <pid>] [--app-bundle-id <app-bundle-id>]
                         [--project (<project-name>|--none|--active)] [--format <output-format>]
                         [--count] [--json]
+       OR: list-windows [-h|--help] --project (<project-name>|--none|--active)
+                        [--pid <pid>] [--app-bundle-id <app-bundle-id>] [--format <output-format>]
+                        [--count] [--json]
        OR: list-windows [-h|--help] --all [--format <output-format>] [--count] [--json]
        OR: list-windows [-h|--help] --focused [--format <output-format>] [--count] [--json]
     """
@@ -112,6 +115,10 @@ let macos_native_minimize_help_generated = """
     """
 let mode_help_generated = """
     USAGE: mode [-h|--help] [--] <binding-mode>
+    """
+let move_app_to_project_help_generated = """
+    USAGE: move-app-to-project [-h|--help] [--pid <pid>] <project-name>
+       OR: move-app-to-project [-h|--help] [--pid <pid>] --none
     """
 let move_mouse_help_generated = """
     USAGE: move-mouse [-h|--help] [--fail-if-noop] <mouse-position>
@@ -142,9 +149,16 @@ let move_help_generated = """
 let project_back_and_forth_help_generated = """
     USAGE: project-back-and-forth [-h|--help]
     """
+let project_launch_help_generated = """
+    USAGE: project-launch [-h|--help] [--project <project-name>]
+       OR: project-launch [-h|--help] [--project <project-name>] --app <app-id>... [--open <item>...]
+    """
+let project_quit_help_generated = """
+    USAGE: project-quit [-h|--help] [<project-name>]
+    """
 let project_help_generated = """
-    USAGE: project [-h|--help] <project-name>
-       OR: project [-h|--help] [--wrap-around] (next|prev)
+    USAGE: project [-h|--help] [--launch-missing] <project-name>
+       OR: project [-h|--help] [--wrap-around] [--launch-missing] (next|prev)
        OR: project [-h|--help] --none
     """
 let reload_config_help_generated = """
@@ -171,12 +185,12 @@ let swap_help_generated = """
                 [--wrap-around] (left|down|up|right|dfs-next|dfs-prev)
     """
 let test_not_help_generated = """
-    USAGE: test-not [-h|--help] <lhs> = <rhs>
-       OR: test-not [-h|--help] <lhs> ~= <rhs>
+    USAGE: test-not [-h|--help] <lhs> = [--] <rhs>
+       OR: test-not [-h|--help] <lhs> ~= [--] <rhs>
     """
 let test_help_generated = """
-    USAGE: test [-h|--help] <lhs> = <rhs>
-       OR: test [-h|--help] <lhs> ~= <rhs>
+    USAGE: test [-h|--help] <lhs> = [--] <rhs>
+       OR: test [-h|--help] <lhs> ~= [--] <rhs>
     """
 let trigger_binding_help_generated = """
     USAGE: trigger-binding [-h|--help] --mode <mode-id> [--] <binding>

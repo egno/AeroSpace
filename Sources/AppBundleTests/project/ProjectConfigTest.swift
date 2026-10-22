@@ -8,13 +8,15 @@ let projectsTestConfig = """
     on-project-changed = 'exec-and-forget echo project'
 
     [project-apps.chrome]
-    if = 'test %{app-bundle-id} = com.google.Chrome && test %{app-args} ~= " --user-data-dir=.*/\\.chrome/{project}( |$)"'
+    if = 'test %{app-bundle-id} = com.google.Chrome && test %{app-args} ~= -- "--user-data-dir=.*/\\.chrome/{project}( |$)"'
     launch = 'open -na "Google Chrome" --args --user-data-dir="$HOME/.chrome/{project}"'
     global-launch = 'open -na "Google Chrome"'
+    bundle-id = 'com.google.Chrome'
 
     [project-apps.kitty]
     if = 'test %{app-bundle-id} = net.kovidgoyal.kitty && test %{app-args} ~= " --instance-group[= ]{project}( |$)"'
     launch = 'kitty --single-instance --instance-group {project} herdr --session {project}'
+    bundle-id = 'net.kovidgoyal.kitty'
 
     [project-apps.cursor]
     if = 'test %{app-bundle-id} = com.todesktop.230313mzl4w4u92 && test %{app-args} ~= " --user-data-dir[= ].*/\\.cursor-projects/{project}( |$)"'

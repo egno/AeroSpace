@@ -24,10 +24,18 @@ enum ProjectOwnership: Equatable {
 @MainActor var projectHiddenPids: Set<pid_t> = []
 /// project name -> window id
 @MainActor var projectMruWindowIds: [String: UInt32] = [:]
+/// Most recently focused windows of all apps, the most recent first. Used to focus the MRU window of an app instance
+@MainActor var mruWindowIds: [UInt32] = []
+private let mruWindowIdsLimit = 100
+/// pid -> ownership. Set by move-app-to-project. Beats the config rules. Lives until the process exits
+@MainActor var projectOwnershipOverrides: [pid_t: ProjectOwnership] = [:]
+/// Unit tests don't have real running apps
+@MainActor var runningAppsForTests: [any AbstractApp] = []
 @MainActor var isProjectSwitchInProgress = false
 
 @MainActor func getProjectOwnership(_ app: any AbstractApp) -> ProjectOwnership {
     if config.projects.isEmpty { return .global }
+    if let override = projectOwnershipOverrides[app.pid] { return override }
     if let cached = projectOwnershipCache[app.pid] { return cached }
     let result = resolveProjectOwnership(app, config.projects)
     projectOwnershipCache[app.pid] = result
@@ -38,6 +46,15 @@ enum ProjectOwnership: Equatable {
 
 @MainActor func resetProjectOwnershipCache() {
     projectOwnershipCache = [:]
+}
+
+/// `project == nil` makes the process global
+@MainActor func setProjectOwnershipOverride(pid: pid_t, project: String?) {
+    projectOwnershipOverrides[pid] = project.map(ProjectOwnership.project) ?? .global
+}
+
+@MainActor func getRunningApps() -> [any AbstractApp] {
+    isUnitTest ? runningAppsForTests : MacApp.allAppsMap.values.filter { !$0.nsApp.isTerminated }
 }
 
 /// Shared (`{project}`-specific) match beats whole-app match. The remaining tie is a conflict
@@ -137,8 +154,9 @@ func getProjectVisibilityPlan(activeProject: String?, apps: [ProjectAppState], p
 }
 
 @MainActor private func gcProjectState() {
-    let alivePids = MacApp.allAppsMap.filter { !$0.value.nsApp.isTerminated }.keys.toSet()
+    let alivePids = getRunningApps().map(\.pid).toSet()
     projectOwnershipCache = projectOwnershipCache.filter { alivePids.contains($0.key) }
+    projectOwnershipOverrides = projectOwnershipOverrides.filter { alivePids.contains($0.key) }
     projectHiddenPids = projectHiddenPids.intersection(alivePids)
 }
 
@@ -244,7 +262,7 @@ func getProjectVisibilityPlan(activeProject: String?, apps: [ProjectAppState], p
 }
 
 extension Window {
-    @MainActor fileprivate var isFocusableAfterProjectSwitch: Bool {
+    @MainActor var isFocusableAfterProjectSwitch: Bool {
         if projectHiddenPids.contains(app.pid) { return false }
         switch windowParentCases {
             case .tilingContainer, .floatingWindowsContainer: break
@@ -257,13 +275,21 @@ extension Window {
 
 /// Should be called on every focus change
 @MainActor func rememberProjectMruWindow(_ window: Window?) {
-    guard let window, !config.projects.isEmpty, let project = getProjectName(of: window.app) else { return }
+    guard let window, !config.projects.isEmpty else { return }
+    if mruWindowIds.first != window.windowId {
+        mruWindowIds = [window.windowId] + mruWindowIds.filter { $0 != window.windowId }.prefix(mruWindowIdsLimit - 1)
+    }
+    guard let project = getProjectName(of: window.app) else { return }
     projectMruWindowIds[project] = window.windowId
 }
 
 @MainActor func onProjectChanged(prev: String?, new: String?) async {
     broadcastEvent(.projectChanged(project: new, prevProject: prev))
-    _ = await config.onProjectChanged.run(.defaultEnv, CmdIoImpl.emptyStdinIgnoringOut)
+    _ = await config.onProjectChanged.run(CmdEnv.defaultEnv.withEnvVars(getProjectChangedEnvVars(prev: prev, new: new)), CmdIoImpl.emptyStdinIgnoringOut)
+}
+
+func getProjectChangedEnvVars(prev: String?, new: String?) -> [String: String] {
+    [AEROSPACE_PROJECT: new ?? "", AEROSPACE_PREV_PROJECT: prev ?? ""]
 }
 
 /// R4. A process of an inactive project got unhidden/activated externally (cmd-tab, Dock, notification click)

@@ -14,6 +14,9 @@ aerospace list-windows [-h|--help] (--workspace <workspace>...|--monitor <monito
                        [--pid <pid>] [--app-bundle-id <app-bundle-id>]
                        [--project (<project-name>|--none|--active)] [--format <output-format>]
                        [--count] [--json]
+aerospace list-windows [-h|--help] --project (<project-name>|--none|--active)
+                       [--pid <pid>] [--app-bundle-id <app-bundle-id>] [--format <output-format>]
+                       [--count] [--json]
 aerospace list-windows [-h|--help] --all [--format <output-format>] [--count] [--json]
 aerospace list-windows [-h|--help] --focused [--format <output-format>] [--count] [--json]
 
@@ -59,7 +62,8 @@ Deprecated (but still supported) flag name: `--app-id`
 --project (<project-name>|--none|--active)::
 Filter results to only print windows that belong to the specified project.
 `--none` filters windows that don't belong to any project.
-`--active` filters windows of the active project
+`--active` filters windows of the active project.
+If neither `--monitor` nor `--workspace` is specified, windows of all monitors are printed
 
 --format <output-format>:: Specify output format. See "Output Format" section for more details.
 Incompatible with `--count`

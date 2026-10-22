@@ -31,12 +31,15 @@ public enum CmdKind: String, CaseIterable, Equatable, Sendable {
     case macosNativeMinimize = "macos-native-minimize"
     case mode
     case move = "move"
+    case moveAppToProject = "move-app-to-project"
     case moveMouse = "move-mouse"
     case moveNodeToMonitor = "move-node-to-monitor"
     case moveNodeToWorkspace = "move-node-to-workspace"
     case moveWorkspaceToMonitor = "move-workspace-to-monitor"
     case project
     case projectBackAndForth = "project-back-and-forth"
+    case projectLaunch = "project-launch"
+    case projectQuit = "project-quit"
     case reloadConfig = "reload-config"
     case resize
     case runCallback = "run-callback"
@@ -117,6 +120,8 @@ func initSubcommands() -> [String: any SubCommandParserProtocol] {
                 result[kind.rawValue] = SubCommandParser(parseMoveCmdArgs)
                 // deprecated
                 result["move-through"] = SubCommandParser(parseMoveCmdArgs)
+            case .moveAppToProject:
+                result[kind.rawValue] = SubCommandParser(parseMoveAppToProjectCmdArgs)
             case .moveMouse:
                 result[kind.rawValue] = SubCommandParser(parseMoveMouseCmdArgs)
             case .moveNodeToMonitor:
@@ -131,6 +136,10 @@ func initSubcommands() -> [String: any SubCommandParserProtocol] {
                 result[kind.rawValue] = SubCommandParser(parseProjectCmdArgs)
             case .projectBackAndForth:
                 result[kind.rawValue] = SubCommandParser(ProjectBackAndForthCmdArgs.init)
+            case .projectLaunch:
+                result[kind.rawValue] = SubCommandParser(parseProjectLaunchCmdArgs)
+            case .projectQuit:
+                result[kind.rawValue] = SubCommandParser(ProjectQuitCmdArgs.init)
             case .reloadConfig:
                 result[kind.rawValue] = SubCommandParser(ReloadConfigCmdArgs.init)
             case .resize:

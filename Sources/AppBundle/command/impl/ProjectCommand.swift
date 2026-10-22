@@ -24,6 +24,9 @@ struct ProjectCommand: Command {
                 }
         }
         await switchProject(to: target)
+        if args.launchMissing, let project = config.projects.first(where: { $0.name == target }) {
+            return await launchMissingProjectApps(project, io)
+        }
         return .succ
     }
 }

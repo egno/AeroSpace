@@ -3,6 +3,7 @@ import Common
 struct CmdEnv {
     var windowId: UInt32? = nil
     var workspaceName: String? = nil
+    var envVars: [String: String] = [:]
 
     static let defaultEnv: CmdEnv = .init()
 
@@ -25,8 +26,13 @@ struct CmdEnv {
         return self
     }
 
+    consuming func withEnvVars(_ envVars: [String: String]) -> CmdEnv {
+        self.envVars = envVars
+        return self
+    }
+
     var asMap: [String: String] {
-        var result = [String: String]()
+        var result = envVars
         if let windowId {
             result[AEROSPACE_WINDOW_ID] = windowId.description
         }

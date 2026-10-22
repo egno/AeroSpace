@@ -48,6 +48,10 @@ func setUpWorkspacesForTests() {
     prevActiveProjectName = nil
     projectHiddenPids = []
     projectMruWindowIds = [:]
+    mruWindowIds = []
+    projectOwnershipOverrides = [:]
+    runningAppsForTests = []
+    projectSideEffectsForTests = []
     resetProjectOwnershipCache()
 }
 
