@@ -37,6 +37,7 @@ final class MacWindow: Window {
         try await debugWindowsIfRecording(window, .cancellable)
         if try await !restoreClosedWindowsCacheIfNeeded(newlyDetectedWindow: window) {
             await runOnWindowDetected(ifConventional: window)
+            await assignNewProjectWindowIfNeeded(window)
         }
         return window
     }

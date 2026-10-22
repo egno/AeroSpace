@@ -4,17 +4,31 @@ let projectPlaceholder = "{project}"
 let openPlaceholder = "{open}"
 
 /// `[project-apps.<id>]`
-struct ProjectAppDef: ConvenienceMutable, Equatable {
+struct ProjectAppDef: ConvenienceMutable {
     var rawIf: String? = nil
     var launch: String? = nil
     var globalLaunch: String? = nil
     /// Used to find the global instance of the app (a process with this bundle ID that matches no project)
     var bundleId: String? = nil
+    /// See isPerWindow
+    var rawWindowIf: String? = nil
+    var newWindows: NewProjectWindowsPolicy = .global
+    /// Runs after a window of a per-window app gets assigned to a project (or made global)
+    var onWindowAssigned: Shell<any Command> = .empty
 
     /// Shared app definitions contain `{project}` placeholder in their matcher.
     /// Each project that references a shared definition gets its own instance.
     /// Otherwise, it's a whole-app definition. All processes of the app belong to the single project that references it
     var isShared: Bool { rawIf?.contains(projectPlaceholder) == true }
+
+    /// Per-window definitions have `window-if`. `if` selects the processes, `window-if` decides the project of every window.
+    /// Such processes are never hidden as a whole. Their windows are hidden one by one
+    var isPerWindow: Bool { rawWindowIf != nil }
+}
+
+enum NewProjectWindowsPolicy: String, CaseIterable, Sendable {
+    case activeProject = "active-project"
+    case global
 }
 
 /// An app definition referenced from a `[[projects]]` entry with `{project}` already substituted
@@ -22,9 +36,15 @@ struct ProjectApp {
     let appId: String
     let isShared: Bool
     let matcher: Shell<any Command>
+    /// `window-if` with `{project}` substituted. Not nil for per-window apps
+    let windowMatcher: Shell<any Command>?
+    let newWindows: NewProjectWindowsPolicy
+    let onWindowAssigned: Shell<any Command>
     let launch: String?
     let autostart: Bool
     let open: [String]
+
+    var isPerWindow: Bool { windowMatcher != nil }
 }
 
 struct Project {
@@ -56,6 +76,9 @@ private let projectAppDefParser: [String: any ParserProtocol<ProjectAppDef>] = [
     "launch": Parser(\.launch) { raw, backtrace in parseString(raw, backtrace).map(Optional.init) },
     "global-launch": Parser(\.globalLaunch) { raw, backtrace in parseString(raw, backtrace).map(Optional.init) },
     "bundle-id": Parser(\.bundleId, parseBundleId),
+    "window-if": Parser(\.rawWindowIf) { raw, backtrace in parseString(raw, backtrace).map(Optional.init) },
+    "new-windows": Parser(\.newWindows, parseNewProjectWindowsPolicy),
+    "on-window-assigned": Parser(\.onWindowAssigned, parseShellOfCommandsForConfig),
 ]
 
 private let rawProjectParser: [String: any ParserProtocol<RawProject>] = [
@@ -88,6 +111,11 @@ func parseProjectAppDefs(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: 
         }
         if def.globalLaunch != nil && def.bundleId == nil {
             c.errors.append(.init(backtrace + .key("global-launch"), "'global-launch' requires 'bundle-id'. It's used to find the running global instance"))
+        }
+        if !def.isPerWindow {
+            for key in ["new-windows", "on-window-assigned"] where rawDef.asDictOrNil?[key] != nil {
+                c.errors.append(.init(backtrace + .key(key), "'\(key)' requires 'window-if'"))
+            }
         }
         result[id] = def
     }
@@ -140,6 +168,12 @@ private func parseProjectArrayOfStrings(_ raw: OrderedJson, _ backtrace: ConfigB
         .flatMap { arr in arr.enumerated().mapAllOrFailure { (index, elem) in parseString(elem, backtrace + .index(index)) } }
 }
 
+private func parseNewProjectWindowsPolicy(_ raw: OrderedJson, _ backtrace: ConfigBacktrace) -> ResOrConfigParseDiagnostic<NewProjectWindowsPolicy> {
+    parseString(raw, backtrace).flatMap {
+        parseEnum($0, NewProjectWindowsPolicy.self).toParsedConfig(backtrace)
+    }
+}
+
 func parseInactiveProjectActivationPolicy(_ raw: OrderedJson, _ backtrace: ConfigBacktrace) -> ResOrConfigParseDiagnostic<InactiveProjectActivationPolicy> {
     parseString(raw, backtrace).flatMap {
         parseEnum($0, InactiveProjectActivationPolicy.self).toParsedConfig(backtrace)
@@ -182,7 +216,7 @@ func resolveProjects(
                 c.errors.append(.init(backtrace, "App '\(appId)' is referenced more than once in project '\(name)'"))
                 continue
             }
-            if !def.isShared {
+            if !def.isShared && !def.isPerWindow {
                 wholeAppReferences[appId, default: []].append(name)
             }
             let rawIf = def.rawIf.orDie().replacingOccurrences(of: projectPlaceholder, with: name)
@@ -195,6 +229,17 @@ func resolveProjects(
                     if appIdsWithInvalidMatcher.insert(appId).inserted { c.errors.append(.init(ifBacktrace, msg)) }
                     continue
             }
+            var windowMatcher: Shell<any Command>? = nil
+            if let rawWindowIf = def.rawWindowIf?.replacingOccurrences(of: projectPlaceholder, with: name) {
+                switch parseProjectWindowMatcher(rawWindowIf) {
+                    case .success(let it): windowMatcher = it
+                    case .failure(let msg):
+                        if appIdsWithInvalidMatcher.insert(appId).inserted {
+                            c.errors.append(.init(.rootKey(projectAppsConfigRootKey) + .key(appId) + .key("window-if"), msg))
+                        }
+                        continue
+                }
+            }
             if !ref.open.isEmpty && def.launch?.contains(openPlaceholder) != true {
                 c.errors.append(.init(backtrace + .key("open"), "'open' requires \(openPlaceholder) placeholder in 'launch' of [project-apps.\(appId)]"))
             }
@@ -202,6 +247,9 @@ func resolveProjects(
                 appId: appId,
                 isShared: def.isShared,
                 matcher: matcher,
+                windowMatcher: windowMatcher,
+                newWindows: def.newWindows,
+                onWindowAssigned: def.onWindowAssigned,
                 launch: def.launch?.replacingOccurrences(of: projectPlaceholder, with: name),
                 autostart: ref.autostart,
                 open: ref.open,
@@ -225,17 +273,27 @@ func resolveProjects(
 /// Project app matchers are evaluated against an app (process), not against a window.
 /// That's why only a subset of commands is allowed
 func parseProjectAppMatcher(_ raw: String) -> ResOrStr<Shell<any Command>> {
+    parseProjectMatcher(raw, allowWindowVars: false)
+}
+
+/// `window-if` matchers are evaluated against a window. %{window-*} variables are allowed too
+func parseProjectWindowMatcher(_ raw: String) -> ResOrStr<Shell<any Command>> {
+    parseProjectMatcher(raw, allowWindowVars: true)
+}
+
+private func parseProjectMatcher(_ raw: String, allowWindowVars: Bool) -> ResOrStr<Shell<any Command>> {
     parseCommand(raw, allowExecAndForget: false, allowEval: false).toResult().flatMap { shell in
         if case .empty = shell { return .failure("The matcher must not be empty") }
-        if let error = validateProjectAppMatcher(shell) { return .failure(error) }
+        if let error = validateProjectMatcher(shell, allowWindowVars: allowWindowVars) { return .failure(error) }
         return .success(shell)
     }
 }
 
-private func validateProjectAppMatcher(_ shell: Shell<any Command>) -> String? {
+private func validateProjectMatcher(_ shell: Shell<any Command>, allowWindowVars: Bool) -> String? {
     switch shell {
         case .pipe: return "Pipes are not allowed in project app matchers"
-        case .and(let it), .or(let it), .seq(let it): return it.lazy.compactMap(validateProjectAppMatcher).first
+        case .and(let it), .or(let it), .seq(let it):
+            return it.lazy.compactMap { validateProjectMatcher($0, allowWindowVars: allowWindowVars) }.first
         case .empty: return nil
         case .cmd(let cmd):
             let lhs: FormatVar
@@ -247,8 +305,12 @@ private func validateProjectAppMatcher(_ shell: Shell<any Command>) -> String? {
             }
             return switch lhs {
                 case .app(.appProject): "%{app-project} is not allowed in project app matchers"
+                case .window(.windowProject): "%{window-project} is not allowed in project app matchers"
                 case .app: nil
-                default: "Only %{app-*} interpolation variables are allowed in project app matchers. Got: %{\(lhs.rawValue)}"
+                case .window where allowWindowVars: nil
+                default: allowWindowVars
+                ? "Only %{app-*} and %{window-*} interpolation variables are allowed in 'window-if'. Got: %{\(lhs.rawValue)}"
+                : "Only %{app-*} interpolation variables are allowed in project app matchers. Got: %{\(lhs.rawValue)}"
             }
     }
 }

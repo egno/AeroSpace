@@ -20,16 +20,22 @@ final class TestProjectApp: AbstractApp {
     @MainActor func getFocusedWindow(_ cm: CancellationMode) -> Window? { nil }
 }
 
-final class TestProjectWindow: Window {
+final class TestProjectWindow: Window, CustomStringConvertible {
+    nonisolated var description: String { "TestProjectWindow(\(windowId))" }
+
+    @MainActor var title: String? = nil
+
     @MainActor
     @discardableResult
-    static func new(id: UInt32, app: TestProjectApp, parent: NonLeafTreeNodeObject) -> TestProjectWindow {
-        TestProjectWindow(id: id, app, lastFloatingSize: nil, parent: parent, adaptiveWeight: 1, index: INDEX_BIND_LAST)
+    static func new(id: UInt32, app: TestProjectApp, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat = 1, title: String? = nil) -> TestProjectWindow {
+        let window = TestProjectWindow(id: id, app, lastFloatingSize: nil, parent: parent, adaptiveWeight: adaptiveWeight, index: INDEX_BIND_LAST)
+        window.title = title
+        return window
     }
 
     @MainActor override func nativeFocus() {}
     override func closeAxWindow() { unbindFromParent() }
-    override func getTitle(_ cm: CancellationMode) async throws -> String { "TestProjectWindow(\(windowId))" }
+    @MainActor override func getTitle(_ cm: CancellationMode) async throws -> String { title ?? "TestProjectWindow(\(windowId))" }
     @MainActor override func getAxRect(_ cm: CancellationMode) async throws -> Rect? { nil }
     @MainActor override func getAxSize(_ cm: CancellationMode) async throws -> CGSize? { nil }
 }

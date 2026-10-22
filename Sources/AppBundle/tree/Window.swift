@@ -55,12 +55,54 @@ struct PrevTilingBinding {
     weak var parent: TilingContainer? // The container may be normalized away while the window is hidden
     let adaptiveWeight: CGFloat
     let index: Int
+    /// Shared by all windows that left the same parent. Index is only a fallback
+    let order: TilingChildrenOrder?
 
-    init?(_ data: BindingData?) {
+    init?(_ data: BindingData?, order: TilingChildrenOrder? = nil) {
         guard let data, let parent = data.parent as? TilingContainer else { return nil }
         self.parent = parent
         self.adaptiveWeight = data.adaptiveWeight
         self.index = data.index
+        self.order = order
+    }
+}
+
+/// The order of the tiling container's children including the windows that left it (hidden, minimized, fullscreen).
+/// Remembered indices are not enough: when windows come back in a different order than they left
+/// (e.g. some of them stay hidden), the indices point to wrong places
+final class TilingChildrenOrder {
+    private struct WeakNode {
+        weak var node: TreeNode?
+    }
+
+    private var nodes: [WeakNode] = []
+
+    /// Merges the current children of `parent` with the windows that left it. A left window stays right after its
+    /// remembered predecessor. `leftWindow` counts as left even though its prevTilingBinding is already reset
+    @MainActor
+    @discardableResult
+    func update(_ parent: TilingContainer, leftWindow: Window? = nil) -> [TreeNode] {
+        var result = parent.children
+        var predecessor: TreeNode? = nil
+        for node in nodes.compactMap(\.node) {
+            if !result.contains(where: { $0 === node }), let window = node as? Window,
+               window === leftWindow || window.layoutReason != .standard && window.prevTilingBinding?.parent === parent
+            {
+                let index = predecessor.flatMap { p in result.firstIndex(where: { $0 === p }) }.map { $0 + 1 } ?? 0
+                result.insert(window, at: index)
+            }
+            if result.contains(where: { $0 === node }) { predecessor = node }
+        }
+        nodes = result.map { WeakNode(node: $0) }
+        return result
+    }
+
+    /// The index in `parent` to bring the left window back to
+    @MainActor
+    func getRestoreIndex(of window: Window, in parent: TilingContainer) -> Int? {
+        let order = update(parent, leftWindow: window)
+        guard let position = order.firstIndex(where: { $0 === window }) else { return nil }
+        return order.prefix(position).count(where: { $0.parent === parent })
     }
 }
 

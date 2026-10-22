@@ -34,7 +34,7 @@ func runHeavyCompleteRefreshSession(
         try await $refreshSessionEvent.withValue(event) {
             let nativeFocused = try await getNativeFocusedWindow(.cancellable)
             if let nativeFocused { try await debugWindowsIfRecording(nativeFocused, .cancellable) }
-            updateFocusCache(nativeFocused)
+            if await !handleInactiveProjectWindowActivation(nativeFocused) { updateFocusCache(nativeFocused) }
 
             if shouldLayoutWorkspaces && optimisticallyPreLayoutWorkspaces { try await layoutWorkspaces() }
 
@@ -68,7 +68,7 @@ func runLightSession<T>(
     return try await $refreshSessionEvent.withValue(event) {
         let nativeFocused = try await getNativeFocusedWindow(.cancellable)
         if let nativeFocused { try await debugWindowsIfRecording(nativeFocused, .cancellable) }
-        updateFocusCache(nativeFocused)
+        if await !handleInactiveProjectWindowActivation(nativeFocused) { updateFocusCache(nativeFocused) }
         let focusBefore = focus.windowOrNil
 
         await refreshModel_nonCancellable()
@@ -190,12 +190,20 @@ private func layoutWorkspaces() async throws {
     // to reduce flicker, first unhide visible workspaces, then hide invisible ones
     for monitor in monitors {
         let workspace = monitor.activeWorkspace
-        workspace.allLeafWindowsRecursive.forEach { ($0 as! MacWindow).unhideFromCorner() } // todo as!
+        workspace.allLeafWindowsRecursive.filter { !$0.isParkedByProject }.forEach { ($0 as! MacWindow).unhideFromCorner() } // todo as!
         try await workspace.layoutWorkspace()
     }
     for workspace in Workspace.all where !workspace.isVisible {
         let corner = monitorToOptimalHideCorner[workspace.workspaceMonitor.rect.topLeftCorner] ?? .bottomRightCorner
         for window in workspace.allLeafWindowsRecursive {
+            try await (window as! MacWindow).hideInCorner(corner) // todo as!
+        }
+    }
+    // Windows of inactive projects (per-window project ownership) stay in the corner even on visible workspaces
+    for monitor in monitors {
+        let workspace = monitor.activeWorkspace
+        let corner = monitorToOptimalHideCorner[workspace.workspaceMonitor.rect.topLeftCorner] ?? .bottomRightCorner
+        for window in workspace.allLeafWindowsRecursive where window.isParkedByProject {
             try await (window as! MacWindow).hideInCorner(corner) // todo as!
         }
     }

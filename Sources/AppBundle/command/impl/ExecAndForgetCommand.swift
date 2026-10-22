@@ -17,5 +17,7 @@ struct ExecAndForgetCommand: Command {
     process.environment = config.execConfig.envVariables + env
     process.executableURL = URL(filePath: "/bin/bash")
     process.arguments = ["-c", bashScript]
-    return Result { try process.run() }.isSuccess
+    let isSuccess = Result { try process.run() }.isSuccess
+    if isSuccess { execAndForgetSpawnedProcesses?.append(process) }
+    return isSuccess
 }

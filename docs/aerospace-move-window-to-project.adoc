@@ -1,0 +1,55 @@
+= aerospace-move-window-to-project(1)
+include::util/man-attributes.adoc[]
+:manname: aerospace-move-window-to-project
+// tag::purpose[]
+:manpurpose: Manually assign a window of a per-window app to a project
+// end::purpose[]
+
+// =========================================================== Synopsis
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace move-window-to-project [-h|--help] [--window-id <window-id>] <project-name>
+aerospace move-window-to-project [-h|--help] [--window-id <window-id>] --none
+
+// end::synopsis[]
+
+// =========================================================== Description
+== Description
+
+// tag::body[]
+{manpurpose}
+
+The command works only for windows of per-window apps (`[project-apps.<id>]` with `window-if`).
+For other apps, use <<move-app-to-project, move-app-to-project>>: their windows belong to the project of their process.
+
+The override takes precedence over `window-if` matchers and over the ownership of the process.
+It survives `reload-config` and AeroSpace restarts, and lasts until the process of the window exits.
+
+After the assignment, the `on-window-assigned` commands of the app definition run with the window focused (frontmost in
+its app), so that `window 1` in AppleScript is the assigned window.
+The commands get `AEROSPACE_PROJECT` (empty for `--none`) and `AEROSPACE_WINDOW_ID` environment variables.
+AeroSpace waits for the processes started by `exec-and-forget` in `on-window-assigned` (up to 3 seconds) before it hides
+the window, so that the AppleScript still sees the right window.
+Then the focus goes back to the previously focused window.
+
+If the new project is not active, the window gets hidden.
+If the window was hidden and the new project is active (or `--none`), the window comes back to its previous place.
+
+Also see: <<project, project>>, <<move-app-to-project, move-app-to-project>>
+// end::body[]
+
+// =========================================================== Options
+include::util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+--window-id <window-id>:: The window to move. The focused window by default
+--none:: Make the window global (it doesn't belong to any project)
+
+// =========================================================== Arguments
+include::./util/conditional-arguments-header.adoc[]
+
+<project-name>:: The project to move the window to
+
+// =========================================================== Footer
+include::util/man-footer.adoc[]

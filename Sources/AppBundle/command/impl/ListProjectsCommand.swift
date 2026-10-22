@@ -44,16 +44,24 @@ struct ProjectInfo {
             isActive: project.name == activeProjectName,
             appIds: project.apps.map(\.appId),
             runningAppIds: project.apps
-                .filter { projectApp in projectProcesses.contains { projectApp.matcher.matchesProjectApp($0) } }
+                .filter { projectApp in
+                    // A per-window app is running for the project if the project owns at least one of its windows
+                    projectApp.isPerWindow
+                        ? !getProjectAppWindows(projectApp, project: project.name).isEmpty
+                        : projectProcesses.contains { projectApp.matcher.matchesProjectApp($0) }
+                }
                 .map(\.appId),
         )
     }
 }
 
 extension ProjectFilter {
-    @MainActor func matches(_ app: any AbstractApp) -> Bool {
-        let project = getProjectName(of: app)
-        return switch self {
+    @MainActor func matches(_ app: any AbstractApp) -> Bool { matches(project: getProjectName(of: app)) }
+
+    @MainActor func matches(window: Window) -> Bool { matches(project: getWindowProjectName(window)) }
+
+    @MainActor private func matches(project: String?) -> Bool {
+        switch self {
             case .name(let name): project == name
             case .global: project == nil
             case .active: activeProjectName != nil && project == activeProjectName

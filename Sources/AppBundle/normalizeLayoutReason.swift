@@ -2,6 +2,7 @@ import AppKit
 
 @MainActor
 func normalizeLayoutReason() async throws {
+    try await refreshWindowIfOwnership(.cancellable)
     for workspace in Workspace.all {
         let windows: [Window] = workspace.allLeafWindowsRecursive
         try await _normalizeLayoutReason(workspace: workspace, windows: windows)
@@ -31,6 +32,9 @@ private func _normalizeLayoutReason(workspace: Workspace, windows: [Window]) asy
         let isMacosMinimized = try await (!isMacosFullscreen).andAsync { @MainActor @Sendable in try await window.isMacosMinimized(.cancellable) }
         let isMacosWindowOfHiddenApp = !isMacosFullscreen && !isMacosMinimized &&
             (!config.automaticallyUnhideMacosHiddenApps || projectHiddenPids.contains(window.app.pid)) && window.isMacosAppHidden()
+        // Per-window project ownership: windows of inactive projects leave the layout the same way as windows of hidden apps
+        let isProjectHiddenWindow = !isMacosFullscreen && !isMacosMinimized && isWindowHiddenByProject(window)
+        rememberWindowHiddenByProject(window, isProjectHiddenWindow)
         switch window.layoutReason {
             case .standard:
                 switch true {
@@ -38,13 +42,16 @@ private func _normalizeLayoutReason(workspace: Workspace, windows: [Window]) asy
                         window.enterMacOsNativeUnconventionalState(workspace.macOsNativeFullscreenWindowsContainer, adaptiveWeight: WEIGHT_DOESNT_MATTER)
                     case isMacosMinimized:
                         window.enterMacOsNativeUnconventionalState(macosMinimizedWindowsContainer, adaptiveWeight: 1)
-                    case isMacosWindowOfHiddenApp:
+                    case isMacosWindowOfHiddenApp || isProjectHiddenWindow:
                         window.enterMacOsNativeUnconventionalState(workspace.macOsNativeHiddenAppsWindowsContainer, adaptiveWeight: WEIGHT_DOESNT_MATTER)
                     default: break
                 }
             case .macos(let prevParentKind):
-                if !isMacosFullscreen && !isMacosMinimized && !isMacosWindowOfHiddenApp {
+                if !isMacosFullscreen && !isMacosMinimized && !isMacosWindowOfHiddenApp && !isProjectHiddenWindow {
                     try await exitMacOsNativeUnconventionalState(window: window, prevParentKind: prevParentKind, workspace: workspace, .cancellable)
+                } else if isProjectHiddenWindow && !(window.parent is MacosHiddenAppsWindowsContainer) {
+                    // E.g. a window of an inactive project got unminimized. Keep the remembered place
+                    window.bind(to: workspace.macOsNativeHiddenAppsWindowsContainer, adaptiveWeight: WEIGHT_DOESNT_MATTER, index: INDEX_BIND_LAST)
                 }
         }
     }
@@ -54,9 +61,22 @@ extension Window {
     @MainActor
     fileprivate func enterMacOsNativeUnconventionalState(_ container: NonLeafTreeNodeObject, adaptiveWeight: CGFloat) {
         guard let parent else { return }
+        let order = (parent as? TilingContainer).map { parent in
+            let order = getTilingChildrenOrder(parent)
+            order.update(parent) // Remember the place of the window among the siblings
+            return order
+        }
         layoutReason = .macos(prevParentKind: parent.kind)
-        prevTilingBinding = PrevTilingBinding(bind(to: container, adaptiveWeight: adaptiveWeight, index: INDEX_BIND_LAST))
+        prevTilingBinding = PrevTilingBinding(bind(to: container, adaptiveWeight: adaptiveWeight, index: INDEX_BIND_LAST), order: order)
     }
+}
+
+/// All windows that left the same tiling container share the order
+@MainActor
+private func getTilingChildrenOrder(_ parent: TilingContainer) -> TilingChildrenOrder {
+    let leftWindows = Workspace.all.flatMap(\.allLeafWindowsRecursive) + macosMinimizedWindowsContainer.children.filterIsInstance(of: Window.self)
+    return leftWindows.lazy.compactMap { $0.prevTilingBinding?.parent === parent ? $0.prevTilingBinding?.order : nil }.first
+        ?? TilingChildrenOrder()
 }
 
 @MainActor
@@ -76,7 +96,8 @@ func exitMacOsNativeUnconventionalState(
             break // Not possible
         case .tilingContainer:
             if let prevTilingBinding, let parent = prevTilingBinding.parent, parent.nodeWorkspace === workspace {
-                window.bind(to: parent, adaptiveWeight: prevTilingBinding.adaptiveWeight, index: min(prevTilingBinding.index, parent.children.count))
+                let index = prevTilingBinding.order?.getRestoreIndex(of: window, in: parent) ?? prevTilingBinding.index
+                window.bind(to: parent, adaptiveWeight: prevTilingBinding.adaptiveWeight, index: min(index, parent.children.count))
             } else {
                 try await window.relayoutWindow(on: workspace, cm, forceTile: true)
             }

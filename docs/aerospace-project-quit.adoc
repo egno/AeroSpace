@@ -24,6 +24,8 @@ Processes are never force-killed. Apps may ask for confirmation (e.g. unsaved ch
 
 If the project is active, it stays active.
 
+Processes of per-window apps (`window-if`) are shared by all projects. They are not quit.
+
 Also see: <<project-launch, project-launch>>
 // end::body[]
 

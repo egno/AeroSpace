@@ -13,3 +13,10 @@
     }
     nativeFocused?.macAppUnsafe.lastNativeFocusedWindowId = nativeFocused?.windowId
 }
+
+@MainActor func isNativeFocusChanged(_ nativeFocused: Window) -> Bool { nativeFocused.windowId != lastKnownNativeFocusedWindowId }
+
+/// The native focus is handled without taking it into AeroSpace focus (see handleInactiveProjectWindowActivation)
+@MainActor func markNativeFocusAsSeen(_ nativeFocused: Window) {
+    lastKnownNativeFocusedWindowId = nativeFocused.windowId
+}

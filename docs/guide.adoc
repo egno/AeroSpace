@@ -733,7 +733,8 @@ alt-g = 'move-app-to-project --none'
 lists the projects to switch between.
 A short HUD with the project name appears on the focused monitor after every switch.
 * Ownership is decided per process (PID) once, and recomputed on `reload-config`.
-Every window of a process belongs to the project of the process.
+Every window of a process belongs to the project of the process
+(except per-window apps, see <<per-window-projects>>).
 * `%{app-args}` is the process command line (`argv` joined with spaces).
 Since `test` treats arguments that start with `-` as flags, put `+--+` before the regex: `+test %{app-args} ~= -- "--user-data-dir=..."+`.
 * A whole-app definition (no `{project}` in `if`) can be referenced by only one project.
@@ -759,6 +760,63 @@ Use `%{app-project}` and `%{window-project}` interpolation variables, `list-wind
 xref:commands.adoc#list-projects[list-projects] and `project-changed` xref:commands.adoc#subscribe[subscribe] event to
 integrate with other tools.
 
+[#per-window-projects]
+=== Per-window project ownership
+
+Sometimes one process must be shared by all projects, e.g. the personal Chrome (with all its logins),
+where every Chrome window belongs to a project.
+An app definition with `window-if` is *per-window*: `if` selects the process, and `window-if` decides the project of
+every window.
+
+[source,toml]
+----
+[project-apps.chrome]
+if = 'test %{app-bundle-id} = com.google.Chrome && test-not %{app-args} ~= -- "--user-data-dir"'
+# The same syntax as 'if', but %{window-*} variables are allowed. {project} is substituted with the project name
+# Chrome's "Name window..." makes the window title '<name> - Google Chrome'
+window-if = 'test %{window-title} ~= "^{project} - Google Chrome$"'
+# 'active-project': a new window goes to the active project. 'global' (default): new windows are global
+new-windows = 'active-project'
+# Runs after a window gets assigned to a project (by 'new-windows' or move-window-to-project).
+# AEROSPACE_PROJECT (empty for global) and AEROSPACE_WINDOW_ID env variables. The window is frontmost in its app
+on-window-assigned = 'exec-and-forget osascript -e "tell application id \"com.google.Chrome\" to set given name of window 1 to \"$AEROSPACE_PROJECT\""'
+launch = 'open -na "Google Chrome" --args --new-window' # project-launch: a new window for the project
+bundle-id = 'com.google.Chrome'
+
+[[projects]]
+name = 'anna'
+apps = ['chrome', 'kitty'] # A per-window definition may be referenced by many projects
+
+[[projects]]
+name = 'bob'
+apps = ['chrome', 'kitty']
+
+[mode.main.binding]
+alt-shift-1 = 'move-window-to-project anna'
+alt-shift-0 = 'move-window-to-project --none'
+----
+
+* The project of a window: xref:commands.adoc#move-window-to-project[move-window-to-project] override >
+`window-if` match > the project of the process (usually global for per-window processes).
+A window that matches no `window-if` is global.
+* The override survives `reload-config` and AeroSpace restarts, and lasts until the process exits.
+`new-windows = 'active-project'` sets the same override, so the window keeps its project even if it's never renamed.
+* Per-window processes are never hidden as a whole.
+Windows of inactive projects leave the layout (the same way windows of hidden apps do) and are parked in the corner
+of the monitor. They keep their workspace and come back to their exact previous place.
+Commands don't see them.
+`enable off` and quitting AeroSpace bring them back.
+* If a window of an inactive project gets focus (cmd-tab brings the most recently active window of the app,
+Dock click, notification click), `on-inactive-project-activation` applies to the window.
+* `on-window-assigned` runs with the window focused, because AppleScript's `window 1` is the most recently active window.
+AeroSpace waits up to 3 seconds for the processes started by `exec-and-forget` in `on-window-assigned`
+before it hides the window.
+* xref:commands.adoc#project-launch[project-launch] `--app chrome` focuses the project's most recently used Chrome window,
+or runs `launch` if the project has no Chrome windows. The new window goes to the project.
+* `%{app-project}` and `list-apps --project` describe processes: a shared Chrome is global there.
+`%{window-project}` and `list-windows --project` use the project of the window.
+* xref:commands.adoc#project-quit[project-quit] doesn't quit per-window processes.
+
 [#environment-variables]
 == Environment variables
 
@@ -780,6 +838,7 @@ In practice:
 `on-project-changed` callback (see <<projects>>) has no target window or workspace.
 It gets `AEROSPACE_PROJECT` and `AEROSPACE_PREV_PROJECT` environment variables instead:
 the new and the previous active project. The variable is empty if no project is active.
+`on-window-assigned` (see <<per-window-projects>>) gets `AEROSPACE_WINDOW_ID` and `AEROSPACE_PROJECT` (empty for global).
 
 Commands that need a target (xref:commands.adoc#layout[layout], xref:commands.adoc#move-node-to-workspace[move-node-to-workspace], xref:commands.adoc#move[move], etc.)
 honor the forwarded context before falling back to the currently focused window or workspace.

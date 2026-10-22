@@ -39,7 +39,7 @@ struct ListWindowsCommand: Command {
                 windows = windows.filter { $0.app.rawAppBundleId == appId }
             }
             if let projectFilter = args.filteringOptions.projectFilter {
-                windows = windows.filter { projectFilter.matches($0.app) }
+                windows = windows.filter { projectFilter.matches(window: $0) }
             }
         }
 

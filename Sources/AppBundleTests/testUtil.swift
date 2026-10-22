@@ -52,6 +52,9 @@ func setUpWorkspacesForTests() {
     projectOwnershipOverrides = [:]
     runningAppsForTests = []
     projectSideEffectsForTests = []
+    windowOwnershipOverrides = [:]
+    projectHiddenWindows = [:]
+    pendingProjectWindowAssignments = []
     resetProjectOwnershipCache()
 }
 

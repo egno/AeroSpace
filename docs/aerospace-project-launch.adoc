@@ -33,6 +33,12 @@ If the instance is running but has no window that can get focus, the `launch` co
 If the instance isn't running, the `launch` command is run.
 * With `--app` and `--open`, the `launch` command is run with the specified items even if the instance is running.
 Apps such as Chrome or Cursor forward the items to the running instance.
+* Per-window apps (`window-if`, one process shared by all projects): "running" means that the project owns at least
+one window of the app.
+With `--app`, the project's most recently used window of the app gets focus.
+If the project has no windows of the app, the `launch` command is run. It's expected to open a new window
+(e.g. `open -na "Google Chrome" --args --new-window`). The next new window of the app (within 10 seconds) goes to the
+project, even if the project isn't active.
 
 `launch` commands are run with `bash -c`.
 `{open}` placeholder in the `launch` command is substituted with shell-quoted, space-separated items:

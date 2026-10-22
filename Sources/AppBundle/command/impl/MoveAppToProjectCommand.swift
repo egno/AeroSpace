@@ -32,12 +32,6 @@ struct MoveAppToProjectCommand: Command {
     setProjectOwnershipOverride(pid: pid, project: project)
     // Hide the process if the target project is inactive, unhide it if it was hidden by project switching
     await reapplyProjectVisibility()
-    if let window = focus.windowOrNil, window.app.pid == pid, projectHiddenPids.contains(pid) {
-        if let newFocus = getFocusAfterProjectSwitch(activeProjectName, preferredPid: nil) {
-            _ = newFocus.focusWindow()
-        } else {
-            _ = setFocus(to: LiveFocus(windowOrNil: nil, workspace: focus.workspace))
-        }
-    }
+    refocusIfFocusedWindowIsHidden()
     saveProjectState()
 }

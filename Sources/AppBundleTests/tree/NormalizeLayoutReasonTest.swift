@@ -73,6 +73,38 @@ final class NormalizeLayoutReasonTest: XCTestCase {
         assertEquals(workspace.rootTilingContainer.layoutDescription, .h_tiles([.window(1), .window(2), .window(3), .window(4)]))
     }
 
+    func testWindowsComeBackInDifferentOrderThanTheyLeft() async throws {
+        let workspace = Workspace.get(byName: name)
+        var windows: [TestWindow] = []
+        workspace.rootTilingContainer.apply {
+            for id in 1 ... 5 { windows.append(TestWindow.new(id: UInt32(id), parent: $0, adaptiveWeight: CGFloat(id))) }
+        }
+        func setHidden(_ ids: [UInt32], _ value: Bool) async throws {
+            for id in ids { windows[Int(id) - 1].isMacosAppHiddenForTest = value }
+            try await normalizeLayoutReason()
+        }
+
+        try await setHidden([4], true)
+        try await setHidden([2], true)
+        try await setHidden([3], true)
+        assertEquals(workspace.rootTilingContainer.layoutDescription, .h_tiles([.window(1), .window(5)]))
+
+        // 3 left the last, but it stays hidden. Remembered indices of 2 and 4 assume that 3 is there
+        try await setHidden([2, 4], false)
+        assertEquals(workspace.rootTilingContainer.layoutDescription, .h_tiles([.window(1), .window(2), .window(4), .window(5)]))
+        try await setHidden([3], false)
+        assertEquals(workspace.rootTilingContainer.layoutDescription, .h_tiles([.window(1), .window(2), .window(3), .window(4), .window(5)]))
+        assertEquals(workspace.rootTilingContainer.children.map { $0.getWeight(.h) }, [1, 2, 3, 4, 5])
+
+        // The first one to leave comes back the last
+        try await setHidden([1, 3], true)
+        try await setHidden([5], true)
+        try await setHidden([3], false)
+        try await setHidden([5], false)
+        try await setHidden([1], false)
+        assertEquals(workspace.rootTilingContainer.layoutDescription, .h_tiles([.window(1), .window(2), .window(3), .window(4), .window(5)]))
+    }
+
     func testHiddenWindowInNestedContainer() async throws {
         let workspace = Workspace.get(byName: name)
         var window3: TestWindow!

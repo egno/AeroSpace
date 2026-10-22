@@ -3,7 +3,7 @@ import Common
 
 /// Small JSON file that survives AeroSpace restarts. It's state, not config, hence XDG_STATE_HOME
 /// https://specifications.freedesktop.org/basedir-spec/latest/
-private struct ProjectStateFile: Codable, Equatable {
+struct ProjectStateFile: Codable, Equatable {
     var activeProject: String? = nil
     var prevActiveProject: String? = nil
     var hasPrevActiveProject: Bool = false
@@ -11,8 +11,20 @@ private struct ProjectStateFile: Codable, Equatable {
     var hiddenPids: [Int32] = []
     /// move-app-to-project overrides. Optional for compatibility with older state files
     var ownershipOverrides: [OwnershipOverride]? = nil
+    /// move-window-to-project and `new-windows` overrides. Optional for compatibility with older state files
+    var windowOwnershipOverrides: [WindowOwnershipOverrideEntry]? = nil
 
     struct OwnershipOverride: Codable, Equatable {
+        let pid: Int32
+        /// nil means global
+        let project: String?
+        /// pid + argv identify the process. Pids are reused after reboot
+        let args: String?
+    }
+
+    /// Window ids are valid only while the process of the window lives
+    struct WindowOwnershipOverrideEntry: Codable, Equatable {
+        let windowId: UInt32
         let pid: Int32
         /// nil means global
         let project: String?
@@ -32,19 +44,37 @@ private var projectStateFileUrl: URL {
 
 @MainActor func saveProjectState() {
     if isUnitTest || !isProjectStateRestored { return }
-    let state = ProjectStateFile(
+    guard let data = try? JSONEncoder.aeroSpaceDefault.encode(getProjectStateFile()) else { return }
+    let url = projectStateFileUrl
+    try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try? data.write(to: url, options: .atomic)
+}
+
+@MainActor func getProjectStateFile() -> ProjectStateFile {
+    let runningApps = getRunningApps()
+    return ProjectStateFile(
         activeProject: activeProjectName,
         prevActiveProject: prevActiveProjectName.flatMap { $0 },
         hasPrevActiveProject: prevActiveProjectName != nil,
         hiddenPids: projectHiddenPids.sorted(),
         ownershipOverrides: projectOwnershipOverrides.sorted(by: { $0.key < $1.key }).map { pid, ownership in
-            .init(pid: pid, project: ownership.projectName, args: getRunningApps().first(where: { $0.pid == pid })?.args)
+            .init(pid: pid, project: ownership.projectName, args: runningApps.first(where: { $0.pid == pid })?.args)
+        },
+        windowOwnershipOverrides: windowOwnershipOverrides.sorted(by: { $0.key < $1.key }).map { windowId, override in
+            .init(windowId: windowId, pid: override.pid, project: override.project, args: runningApps.first(where: { $0.pid == override.pid })?.args)
         },
     )
-    guard let data = try? JSONEncoder.aeroSpaceDefault.encode(state) else { return }
-    let url = projectStateFileUrl
-    try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try? data.write(to: url, options: .atomic)
+}
+
+/// Restores overrides of the windows that still exist and belong to the same process (pid + argv)
+@MainActor func restoreWindowOwnershipOverrides(_ state: ProjectStateFile) {
+    let names = config.projects.map(\.name).toSet()
+    let runningApps = getRunningApps()
+    for o in state.windowOwnershipOverrides ?? [] where o.project.map(names.contains) != false {
+        guard let app = runningApps.first(where: { $0.pid == o.pid }), app.args == o.args,
+              let window = Window.get(byId: o.windowId), window.app.pid == o.pid else { continue }
+        setWindowOwnershipOverride(window, project: o.project)
+    }
 }
 
 /// R3.7: restore the active project and hide processes of inactive projects
@@ -63,6 +93,7 @@ private var projectStateFileUrl: URL {
             setProjectOwnershipOverride(pid: o.pid, project: o.project)
         }
     }
+    restoreWindowOwnershipOverrides(state)
     let projectPids = MacApp.allAppsMap.values.filter { getProjectName(of: $0) != nil }.map(\.pid).toSet()
     projectHiddenPids = Set(state.hiddenPids).intersection(projectPids)
     isProjectStateRestored = true
@@ -78,6 +109,9 @@ private var projectStateFileUrl: URL {
     }
     projectOwnershipOverrides = projectOwnershipOverrides.filter { _, ownership in
         ownership.projectName.map { name in config.projects.contains(where: { $0.name == name }) } != false
+    }
+    windowOwnershipOverrides = windowOwnershipOverrides.filter { _, override in
+        override.project.map { name in config.projects.contains(where: { $0.name == name }) } != false
     }
     if let active = activeProjectName, !config.projects.contains(where: { $0.name == active }) {
         activeProjectName = nil

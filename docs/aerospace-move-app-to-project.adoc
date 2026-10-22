@@ -29,7 +29,11 @@ and lasts until the process exits.
 If the new project is not active, the process gets hidden.
 If the process was hidden by project switching and the new project is active (or `--none`), the process gets unhidden.
 
-Also see: <<project, project>>
+Processes of per-window apps (`window-if`) are never hidden as a whole.
+For them, the override only changes the project of the windows that have no own project (no `window-if` match and no
+<<move-window-to-project, move-window-to-project>> override).
+
+Also see: <<project, project>>, <<move-window-to-project, move-window-to-project>>
 // end::body[]
 
 // =========================================================== Options

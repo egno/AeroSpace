@@ -5,14 +5,16 @@ enum ProjectLaunchStep: Equatable {
     /// The app instance is running. Focus its most recently used window
     case focus(windowId: UInt32)
     /// The app instance of an inactive project is running. Switch to the project and focus the app's window
-    case switchProject(String, preferredPid: pid_t)
-    /// Run the launch command. `project == nil` for global-launch
-    case launch(script: String, project: String?)
+    case switchProject(String, preferredPid: pid_t, preferredWindowId: UInt32? = nil)
+    /// Run the launch command. `project == nil` for global-launch.
+    /// `perWindowAppId`: the next new window of the per-window app goes to the project
+    case launch(script: String, project: String?, perWindowAppId: String? = nil)
 }
 
 enum ProjectSideEffect: Equatable {
     case launch(script: String, env: [String: String])
     case terminate(pid: pid_t)
+    case windowAssigned(windowId: UInt32, env: [String: String])
 }
 
 /// Unit tests must not spawn processes and must not quit apps. The side effects are recorded instead
@@ -28,11 +30,20 @@ enum ProjectSideEffect: Equatable {
     apps.filter { $0.rawAppBundleId == bundleId && getProjectName(of: $0) == nil }.map(\.pid).sorted()
 }
 
+/// The windows of a per-window app owned by the project. Hidden windows count
+@MainActor func getProjectAppWindows(_ projectApp: ProjectApp, project: String) -> [Window] {
+    getAllProjectWindows().filter { projectApp.matcher.matchesProjectApp($0.app) && getWindowProjectName($0) == project }
+}
+
 /// The most recently used focusable window of the processes
 @MainActor func getMruWindow(ofPids pids: [pid_t]) -> Window? {
     let pids = pids.toSet()
+    return getMruWindow { pids.contains($0.app.pid) && $0.isFocusableAfterProjectSwitch }
+}
+
+@MainActor private func getMruWindow(where predicate: (Window) -> Bool) -> Window? {
     let candidates: [Window?] = mruWindowIds.map { Window.get(byId: $0) } + Workspace.all.flatMap(\.allLeafWindowsRecursive)
-    return candidates.lazy.compactMap { $0 }.first(where: { pids.contains($0.app.pid) && $0.isFocusableAfterProjectSwitch })
+    return candidates.lazy.compactMap { $0 }.first(where: predicate)
 }
 
 /// The process of the most recently used window (hidden windows count). Falls back to the first process
@@ -77,9 +88,9 @@ extension String {
 ) -> Result<[ProjectLaunchStep], String> {
     if appIds.isEmpty {
         return project.apps
-            .filter { $0.autostart && $0.launch != nil && getProjectAppInstancePids($0, project: project.name, apps).isEmpty }
+            .filter { $0.autostart && $0.launch != nil && !isProjectAppRunning($0, project: project.name, apps) }
             .mapAllOrFailure { projectApp in
-                getLaunchStep(projectApp.launch.orDie(), projectApp.open, project: project.name, appId: projectApp.appId, home: home)
+                getLaunchStep(projectApp.launch.orDie(), projectApp.open, project: project.name, projectApp: projectApp, home: home)
             }
     }
     let projectApps = appIds.map { appId in project.apps.first(where: { $0.appId == appId }) }
@@ -87,6 +98,9 @@ extension String {
         return .failure("Project '\(project.name)' doesn't reference app '\(appIds[index])'")
     }
     return projectApps.map { $0.orDie() }.mapAllOrFailure { projectApp in
+        if projectApp.isPerWindow {
+            return getPerWindowAppLaunchStep(projectApp, project: project.name, open: open, home: home)
+        }
         let pids = getProjectAppInstancePids(projectApp, project: project.name, apps)
         if !pids.isEmpty && open.isEmpty {
             if project.name != activeProjectName {
@@ -99,8 +113,34 @@ extension String {
         guard let launch = projectApp.launch else {
             return .failure("App '\(projectApp.appId)' of project '\(project.name)' has no 'launch' command")
         }
-        return getLaunchStep(launch, open.isEmpty ? projectApp.open : open, project: project.name, appId: projectApp.appId, home: home)
+        return getLaunchStep(launch, open.isEmpty ? projectApp.open : open, project: project.name, projectApp: projectApp, home: home)
     }
+}
+
+/// A per-window app is "running" for the project if the project owns at least one of its windows
+@MainActor private func isProjectAppRunning(_ projectApp: ProjectApp, project: String, _ apps: [any AbstractApp]) -> Bool {
+    projectApp.isPerWindow
+        ? !getProjectAppWindows(projectApp, project: project).isEmpty
+        : !getProjectAppInstancePids(projectApp, project: project, apps).isEmpty
+}
+
+/// Per-window app: focus the project's MRU window of the app (switch to the project if it's inactive).
+/// No windows: run `launch`. It's expected to open a new window, which goes to the project
+@MainActor private func getPerWindowAppLaunchStep(_ projectApp: ProjectApp, project: String, open: [String], home: String) -> Result<ProjectLaunchStep, String> {
+    let windows = getProjectAppWindows(projectApp, project: project)
+    if !windows.isEmpty && open.isEmpty {
+        if project != activeProjectName {
+            let window = getMruWindow { windows.contains($0) } ?? windows.first.orDie()
+            return .success(.switchProject(project, preferredPid: window.app.pid, preferredWindowId: window.windowId))
+        }
+        if let window = getMruWindow(where: { windows.contains($0) && $0.isFocusableAfterProjectSwitch }) {
+            return .success(.focus(windowId: window.windowId))
+        }
+    }
+    guard let launch = projectApp.launch else {
+        return .failure("App '\(projectApp.appId)' of project '\(project)' has no 'launch' command")
+    }
+    return getLaunchStep(launch, open.isEmpty ? projectApp.open : open, project: project, projectApp: projectApp, home: home)
 }
 
 /// R5.1b. No active project: target the global instances of the apps
@@ -128,9 +168,20 @@ extension String {
     }
 }
 
-private func getLaunchStep(_ template: String, _ open: [String], project: String?, appId: String, home: String) -> Result<ProjectLaunchStep, String> {
+private func getLaunchStep(_ template: String, _ open: [String], project: String, projectApp: ProjectApp, home: String) -> Result<ProjectLaunchStep, String> {
+    getLaunchStep(template, open, project: project, appId: projectApp.appId, perWindowAppId: projectApp.isPerWindow ? projectApp.appId : nil, home: home)
+}
+
+private func getLaunchStep(
+    _ template: String,
+    _ open: [String],
+    project: String?,
+    appId: String,
+    perWindowAppId: String? = nil,
+    home: String,
+) -> Result<ProjectLaunchStep, String> {
     substituteOpenPlaceholder(template, open, home: home)
-        .map { ProjectLaunchStep.launch(script: $0, project: project) }
+        .map { ProjectLaunchStep.launch(script: $0, project: project, perWindowAppId: perWindowAppId) }
         .mapError { "App '\(appId)': \($0)" }
 }
 
@@ -142,9 +193,12 @@ private func getLaunchStep(_ template: String, _ open: [String], project: String
                 if Window.get(byId: windowId)?.focusWindow() != true {
                     result = .fail(io.err("Failed to focus window \(windowId)"))
                 }
-            case .switchProject(let project, let pid):
-                await switchProject(to: project, preferredPid: pid)
-            case .launch(let script, let project):
+            case .switchProject(let project, let pid, let windowId):
+                await switchProject(to: project, preferredPid: pid, preferredWindowId: windowId)
+            case .launch(let script, let project, let perWindowAppId):
+                if let project, let perWindowAppId {
+                    addPendingProjectWindowAssignment(project: project, appId: perWindowAppId)
+                }
                 if !runProjectLaunchCommand(script, project: project) {
                     result = .fail(io.err("Failed to run: \(script)"))
                 }

@@ -164,7 +164,7 @@ extension FormatVar {
                     case .windowIsFullscreen: .success(.bool(w.window.isFullscreen))
                     case .windowTitle: .success(.string(w.title.orDie("Title wasn't prefetched")))
                     case .windowLayout, .windowParentContainerLayout: toLayoutResult(w: w.window)
-                    case .windowProject: .success(.string(getProjectName(of: w.window.app) ?? ""))
+                    case .windowProject: .success(.string(getWindowProjectName(w.window) ?? ""))
                 }
             case (.workspace(let w), .workspace(let f)):
                 return switch f {

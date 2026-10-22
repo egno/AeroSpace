@@ -32,6 +32,7 @@ let subcommandDescriptions = [
     ["  move-mouse", "Move mouse to the requested position"],
     ["  move-node-to-monitor", "Move window to monitor targeted by relative direction, by order, or by pattern"],
     ["  move-node-to-workspace", "Move the focused window to the specified workspace"],
+    ["  move-window-to-project", "Manually assign a window of a per-window app to a project"],
     ["  move-workspace-to-monitor", "Move workspace to monitor targeted by relative direction, by order, or by pattern."],
     ["  move", "Move the focused window in the given direction"],
     ["  project-back-and-forth", "Switch between the active project and previously active project back and forth"],

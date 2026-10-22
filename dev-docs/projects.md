@@ -1,6 +1,7 @@
 # Projects: design & requirements
 
-Status: v3. Spikes S1–S5 done. M1 (core) and M2 (lifecycle) implemented, M3 (router) pending.
+Status: v4. Spikes S1–S5 done. M1 (core), M2 (lifecycle) and per-window ownership (§4a) implemented,
+M3 (router) pending.
 
 ## 1. Problem
 
@@ -17,9 +18,10 @@ moving workspaces between monitors, moving windows between workspaces.
 ### Non-goals (this stage)
 
 - Per-project Slack/Teams/Outlook instances (Slack profiles are explicitly out of scope for now).
-- Splitting the windows of a **single** process between projects (e.g. one Chrome with "bookmark sets").
-  See [§9 Later](#9-later).
 - Per-monitor active project.
+
+Splitting the windows of a **single** process between projects (one personal Chrome shared by all projects) was a
+non-goal of M1/M2. It's implemented now, see [§4a Per-window ownership](#4a-per-window-ownership).
 
 ## 2. Target setup
 
@@ -41,6 +43,8 @@ A process that matches no project is **global**.
 
 Rationale: all target apps support a dedicated instance per project, and process-level ownership is
 robust (no title heuristics) and survives restarts (matching uses launch arguments, not PIDs).
+
+Exception: per-window apps (`window-if`), where one process is shared by all projects. See §4a.
 
 ### D-2. Switching uses macOS native app hiding
 
@@ -210,6 +214,84 @@ apply `on-inactive-project-activation`:
 - **R8.4** Docs: `docs/aerospace-project*.adoc`, `docs/commands.adoc`, `docs/guide.adoc` section, shell completion
   grammar (see command checklist in `architecture.md`).
 
+## 4a. Per-window ownership
+
+✅ Implemented (`Sources/AppBundle/project/projectWindows.swift`).
+
+Use case: ONE personal Chrome (logins kept) shared by all projects, each Chrome window belongs to a project.
+Native app hiding (D-2) can't be used: it hides all windows of the process. Windows are hidden one by one.
+
+Verified facts (macOS 27, Chrome 155): Chrome's "Name window…" (AppleScript `given name` of a window) changes the AX
+title to `<name> - Google Chrome`. `tell application id "com.google.Chrome" to set given name of window 1 to "anna"`
+names the frontmost Chrome window (`window 1` = most recently active). Whether Chrome restores window names after a
+restart is **unverified**, the design doesn't depend on it.
+
+- **W1. Config.** `[project-apps.<id>]` with `window-if` is a *per-window* definition: `if` selects the process(es),
+  `window-if` (same restricted matcher syntax, `%{window-*}` allowed except `%{window-project}`, `{project}` substituted)
+  decides the project of each window. A per-window definition may be referenced by many projects (the whole-app
+  restriction of R1.2 doesn't apply). Per-window definitions don't take part in process ownership (R1.7).
+  `new-windows = 'active-project' | 'global'` (default `global`) and `on-window-assigned = '<commands>'` require `window-if`.
+- **W2. Precedence** for a window: `move-window-to-project` override (by window id) > `window-if` match > ownership of
+  the process (normally global for per-window processes; `move-app-to-project` can change it). A `window-if` tie
+  (2+ projects) is treated as global. `%{window-project}`, `list-windows --project`, per-project MRU, focus after switch,
+  `list-projects` running state use the window's project. `%{app-project}` / `list-apps --project` stay per process.
+- **W3. Title cache.** `window-if` results are cached per window id and recomputed at the beginning of every
+  `normalizeLayoutReason` (titles change; an AX title read per window of per-window processes only).
+  Renaming a Chrome window via Chrome UI therefore moves it between projects at the next refresh.
+- **W4. Hiding.** A per-window process is never hidden as a whole (excluded from the R3.1 visibility plan; if AeroSpace
+  hid it earlier, it's unhidden). A window of such a process that belongs to an inactive project is *project-hidden*.
+  `normalizeLayoutReason` moves project-hidden windows into the per-workspace `MacosHiddenAppsWindowsContainer` exactly
+  like windows of hidden apps (same `layoutReason = .macos(prevParentKind:)` + `prevTilingBinding`), and brings them back
+  with the same exact-restore path (R3.3). `layoutWorkspaces` parks them in the monitor corner (`hideInCorner`) also on
+  visible workspaces, and skips `unhideFromCorner` for them; floating windows restore their position via the usual
+  `unhideFromCorner` after they're back in the floating container. Reusing the container (instead of a new tree node
+  kind) means every command, mouse handler, focus logic, workspace GC (R3.9) and `move-workspace-to-monitor` already
+  ignore/carry these windows, with no changes to the ~15 `switch` statements over container kinds.
+  A window that gets unminimized/leaves fullscreen while project-hidden is moved to the hidden container right away.
+  `enable off` → `isWindowHiddenByProject` is false for a disabled AeroSpace → windows come back. Quit → the
+  termination handler puts all windows on screen.
+- **W5. Exact order.** Remembered indices alone break when windows come back in a different order than they left
+  (e.g. A hidden, B hidden, `project --none` hides C, back to A's project: A and B return while C stays hidden).
+  All windows that left the same tiling container now share a `TilingChildrenOrder` (weak list of the siblings incl.
+  left windows); a returning window is inserted right after its nearest remembered predecessor that is present.
+  The index stays as a fallback. This also fixes the same issue for macOS hidden/minimized windows.
+- **W6. New windows.** For every newly detected window (not at startup, not restored from the closed-windows cache,
+  not a popup) of a per-window process without an override whose `window-if` matches nothing: assign it to the project
+  of a pending `project-launch` (W9), else to the active project if it references a per-window app with
+  `new-windows = 'active-project'` matching the process. The assignment is stored as an override (so it doesn't depend
+  on Chrome naming the window).
+- **W7. `on-window-assigned`.** Runs after an assignment (W6 or `move-window-to-project`) with `AEROSPACE_PROJECT`
+  (empty for global) and `AEROSPACE_WINDOW_ID`. Before running, the window is natively focused so that Chrome's
+  `window 1` is that window. Race: when the window goes to an inactive project, hiding it and re-focusing another
+  (possibly Chrome) window would change `window 1` before the asynchronous `osascript` runs. So AeroSpace waits for the
+  processes spawned by `exec-and-forget` in the callback (up to 3 s) before re-applying visibility and focus.
+- **W8. R4 per window.** In both refresh sessions, before `updateFocusCache`: if the native focus *changed* to a
+  project-hidden window (cmd-tab brings Chrome's last active window, Dock click, notification), apply
+  `on-inactive-project-activation`: `switch` → switch to the window's project focusing that window; `rehide` → give the
+  native focus back to AeroSpace's focused window. Guards against our own focus changes: ignored while a switch/assignment
+  is in progress and for 1 s after AeroSpace hid the window; the native focus is then marked as seen, so a native focus
+  that stays on a parked window (e.g. switch to a project with no windows) doesn't trigger R4 later.
+  The process-level R4 (`handleInactiveProjectActivation`) skips per-window processes.
+- **W9. `project-launch`.** Per-window app is "running" for a project if the project owns at least one of its windows.
+  `--app`: focus the project's MRU window of the app (switch to the project if inactive, focusing that window);
+  no windows → run `launch` (e.g. `open -na "Google Chrome" --args --new-window`) and register a pending assignment
+  (project, app id, 10 s): the next new window of the app goes to that project even if `new-windows = 'global'` or the
+  project is inactive. `project --launch-missing` treats per-window apps the same way. `project-quit` doesn't quit
+  per-window processes (they're shared).
+- **W10. `move-window-to-project <name|--none> [--window-id <id>]`.** Override for one window (default: focused) of a
+  per-window process (error otherwise), runs `on-window-assigned`, re-applies visibility, re-focuses if the focused window
+  got hidden, gives the native focus back.
+- **W11. State.** Window overrides are persisted in the state file as `windowOwnershipOverrides`
+  (`windowId`, `pid`, `project`, `args`), restored only if the window still exists in the same process (pid + argv), and
+  dropped when the process or the window is gone, or when the project is removed from the config.
+
+Open points:
+- Not verified live (unit tests only): parking/unparking frames, Chrome window naming via `on-window-assigned`,
+  R4 timing (1 s grace), cmd-tab/Dock behaviour of Chrome with parked windows.
+- A popup that later turns into a regular window (validateStillPopups) doesn't get a W6 assignment.
+- Parked windows of a visible workspace still appear in Mission Control / App Exposé (corner-parked, like windows of
+  invisible workspaces).
+
 ## 5. Config sketch (syntax not final)
 
 ```toml
@@ -337,7 +419,9 @@ alt-b = 'project-launch --app chrome'  # no active project -> the global Chrome 
    state persistence, `list-projects`, `project-changed`, tests, docs.
 3. **M2 Lifecycle** ✅: `project-launch`, `autostart`, `--launch-missing`, `project-quit`, `move-app-to-project`.
    Plus: `bundle-id`, env variables for `on-project-changed`, `test … -- <rhs>`, `list-windows --project` alone.
-4. **M3 Router**: URL router tool + `list-apps --pid`.
+4. **Per-window ownership** ✅ (§4a): `window-if`, `new-windows`, `on-window-assigned`, per-window hiding,
+   R4 per window, `move-window-to-project`, per-window `project-launch`, exact order restore (`TilingChildrenOrder`).
+5. **M3 Router**: URL router tool + `list-apps --pid`.
 
 ## 8a. Key map (user config, after M1/M2 land)
 
@@ -349,7 +433,7 @@ Leader `f20` / `ctrl-esc` enters `control` mode; one key acts, then back to `mai
 | `` ` `` | `project-back-and-forth` |
 | `` shift-` `` | `project-launch --app kitty` |
 | `w` / `c` | `workspace w; project-launch --app chrome` / `workspace c; project-launch --app cursor` |
-| `/` | `mode project`: `l` `project-launch`, `shift-q` `project-quit`, `shift-1/2/3` `move-app-to-project …` |
+| `/` | `mode project`: `l` `project-launch`, `shift-q` `project-quit`, `shift-1/2/3` `move-app-to-project …`, `1/2/3` / `0` `move-window-to-project …` / `--none` |
 | `h j k l` / `shift-h j k l` | `focus` / `move` direction |
 | `z` / `b` | `fullscreen` / `balance-sizes` |
 | `m` / `shift-m` | `focus-monitor --wrap-around next` / `move-node-to-monitor --focus-follows-window --wrap-around next` |
@@ -359,8 +443,6 @@ Unchanged: workspace letters (`x`, `shift-x`, `ctrl-x`), `f20` workspace back-an
 
 ## 9. Later
 
-- Per-window ownership for shared processes (one Chrome with bookmark sets): needs per-window hiding
-  (corner/stash) instead of native app hiding.
 - Per-project Slack instances.
 - `peek` activation policy.
 - Per-project workspace↔monitor restore (mostly unnecessary given D-3).

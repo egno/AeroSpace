@@ -31,7 +31,9 @@ private let mruWindowIdsLimit = 100
 @MainActor var projectOwnershipOverrides: [pid_t: ProjectOwnership] = [:]
 /// Unit tests don't have real running apps
 @MainActor var runningAppsForTests: [any AbstractApp] = []
-@MainActor var isProjectSwitchInProgress = false
+/// A counter, since window assignments (see projectWindows.swift) may interleave with switching
+@MainActor var projectSwitchesInProgress = 0
+@MainActor var isProjectSwitchInProgress: Bool { projectSwitchesInProgress > 0 }
 
 @MainActor func getProjectOwnership(_ app: any AbstractApp) -> ProjectOwnership {
     if config.projects.isEmpty { return .global }
@@ -46,6 +48,7 @@ private let mruWindowIdsLimit = 100
 
 @MainActor func resetProjectOwnershipCache() {
     projectOwnershipCache = [:]
+    resetWindowOwnershipCaches()
 }
 
 /// `project == nil` makes the process global
@@ -57,12 +60,13 @@ private let mruWindowIdsLimit = 100
     isUnitTest ? runningAppsForTests : MacApp.allAppsMap.values.filter { !$0.nsApp.isTerminated }
 }
 
-/// Shared (`{project}`-specific) match beats whole-app match. The remaining tie is a conflict
+/// Shared (`{project}`-specific) match beats whole-app match. The remaining tie is a conflict.
+/// Per-window app definitions don't own processes, they own windows (see getWindowProjectOwnership)
 @MainActor func resolveProjectOwnership(_ app: any AbstractApp, _ projects: [Project]) -> ProjectOwnership {
     var shared: [String] = []
     var whole: [String] = []
     for project in projects {
-        for projectApp in project.apps where projectApp.matcher.matchesProjectApp(app) {
+        for projectApp in project.apps where !projectApp.isPerWindow && projectApp.matcher.matchesProjectApp(app) {
             switch projectApp.isShared {
                 case true: if !shared.contains(project.name) { shared.append(project.name) }
                 case false: if !whole.contains(project.name) { whole.append(project.name) }
@@ -90,27 +94,30 @@ private let mruWindowIdsLimit = 100
 
 extension Shell where T == any Command {
     /// Evaluates project-apps matcher against the app (process). See parseProjectAppMatcher
-    @MainActor func matchesProjectApp(_ app: any AbstractApp) -> Bool {
+    @MainActor func matchesProjectApp(_ app: any AbstractApp) -> Bool { matchesProjectObj(.app(app)) }
+
+    /// `obj` is an app (`if`) or a window (`window-if`)
+    @MainActor func matchesProjectObj(_ obj: AeroObj) -> Bool {
         switch self {
             case .empty: return true
-            case .and(let it): return it.allSatisfy { $0.matchesProjectApp(app) }
-            case .or(let it): return it.contains { $0.matchesProjectApp(app) }
-            case .seq(let it): return it.last?.matchesProjectApp(app) ?? true
+            case .and(let it): return it.allSatisfy { $0.matchesProjectObj(obj) }
+            case .or(let it): return it.contains { $0.matchesProjectObj(obj) }
+            case .seq(let it): return it.last?.matchesProjectObj(obj) ?? true
             case .pipe: return false
             case .cmd(let cmd):
                 switch cmd {
                     case is TrueCommand: return true
                     case is FalseCommand: return false
-                    case let cmd as TestCommand: return evalProjectAppTest(cmd.args, app) == true
-                    case let cmd as TestNotCommand: return evalProjectAppTest(cmd.args.testArgs, app) == false
+                    case let cmd as TestCommand: return evalProjectMatcherTest(cmd.args, obj) == true
+                    case let cmd as TestNotCommand: return evalProjectMatcherTest(cmd.args.testArgs, obj) == false
                     default: return false
                 }
         }
     }
 }
 
-@MainActor private func evalProjectAppTest(_ args: TestCmdArgs, _ app: any AbstractApp) -> Bool? {
-    guard case .success(let lhs) = args.lhs.val.expandFormatVar(obj: .app(app)) else { return nil }
+@MainActor private func evalProjectMatcherTest(_ args: TestCmdArgs, _ obj: AeroObj) -> Bool? {
+    guard case .success(let lhs) = args.lhs.val.expandFormatVar(obj: obj) else { return nil }
     return try? evalTestCondition(lhs, lhsVar: args.lhs.val, args.infixOperator.val, args.rhs.val).get()
 }
 
@@ -149,8 +156,13 @@ func getProjectVisibilityPlan(activeProject: String?, apps: [ProjectAppState], p
     pids.filter { !projectHiddenPids.contains($0) }
 }
 
+/// Per-window processes are never hidden as a whole (their windows are hidden one by one), so they look global here
 @MainActor func getProjectAppStates() -> [ProjectAppState] {
-    MacApp.allAppsMap.values.map { ProjectAppState(pid: $0.pid, project: getProjectName(of: $0), isHidden: $0.nsApp.isHidden) }
+    MacApp.allAppsMap.values.map { getProjectAppState($0, isHidden: $0.nsApp.isHidden) }
+}
+
+@MainActor func getProjectAppState(_ app: any AbstractApp, isHidden: Bool) -> ProjectAppState {
+    ProjectAppState(pid: app.pid, project: isPerWindowProcess(app) ? nil : getProjectName(of: app), isHidden: isHidden)
 }
 
 @MainActor private func gcProjectState() {
@@ -158,18 +170,19 @@ func getProjectVisibilityPlan(activeProject: String?, apps: [ProjectAppState], p
     projectOwnershipCache = projectOwnershipCache.filter { alivePids.contains($0.key) }
     projectOwnershipOverrides = projectOwnershipOverrides.filter { alivePids.contains($0.key) }
     projectHiddenPids = projectHiddenPids.intersection(alivePids)
+    gcWindowOwnershipState(alivePids: alivePids)
 }
 
-@MainActor func switchProject(to target: String?, preferredPid: pid_t? = nil) async {
-    isProjectSwitchInProgress = true
-    defer { isProjectSwitchInProgress = false }
+@MainActor func switchProject(to target: String?, preferredPid: pid_t? = nil, preferredWindowId: UInt32? = nil) async {
+    projectSwitchesInProgress += 1
+    defer { projectSwitchesInProgress -= 1 }
     let prev = activeProjectName
     if prev != target {
         prevActiveProjectName = .some(prev)
     }
     activeProjectName = target
     await reapplyProjectVisibility()
-    if let window = getFocusAfterProjectSwitch(target, preferredPid: preferredPid) {
+    if let window = getFocusAfterProjectSwitch(target, preferredPid: preferredPid, preferredWindowId: preferredWindowId) {
         _ = window.focusWindow()
     } else {
         _ = setFocus(to: LiveFocus(windowOrNil: nil, workspace: focus.workspace))
@@ -183,14 +196,15 @@ func getProjectVisibilityPlan(activeProject: String?, apps: [ProjectAppState], p
 }
 
 @MainActor func reapplyProjectVisibility() async {
-    if config.projects.isEmpty && projectHiddenPids.isEmpty { return }
+    if config.projects.isEmpty && projectHiddenPids.isEmpty && projectHiddenWindows.isEmpty { return }
     gcProjectState()
     let plan = getProjectVisibilityPlan(activeProject: activeProjectName, apps: getProjectAppStates(), projectHiddenPids: projectHiddenPids)
     await applyProjectVisibility(plan)
 }
 
+/// `enable off`. Windows of per-window processes come back, since isWindowHiddenByProject is false for disabled AeroSpace
 @MainActor func unhideAllProjectHiddenApps() async {
-    if projectHiddenPids.isEmpty { return }
+    if projectHiddenPids.isEmpty && projectHiddenWindows.isEmpty { return }
     await applyProjectVisibility(ProjectVisibilityPlan(toUnhide: projectHiddenPids.sorted(), toHide: []))
 }
 
@@ -205,12 +219,16 @@ func getProjectVisibilityPlan(activeProject: String?, apps: [ProjectAppState], p
 @MainActor private func applyProjectVisibility(_ plan: ProjectVisibilityPlan) async {
     projectHiddenPids.subtract(plan.toUnhide)
     projectHiddenPids.formUnion(plan.toHide)
-    if plan.toUnhide.isEmpty && plan.toHide.isEmpty { return }
-    // Unhide first, then hide. It minimizes flickering
-    await setAppsHidden(plan.toUnhide, false)
-    await setAppsHidden(plan.toHide, true)
-    await waitUntilAppsHiddenStateSettles(plan)
-    if !isUnitTest {
+    let hasAppChanges = !plan.toUnhide.isEmpty || !plan.toHide.isEmpty
+    if hasAppChanges {
+        // Unhide first, then hide. It minimizes flickering
+        await setAppsHidden(plan.toUnhide, false)
+        await setAppsHidden(plan.toHide, true)
+        await waitUntilAppsHiddenStateSettles(plan)
+    }
+    // Windows of per-window processes are hidden only by the layout
+    let hasWindowChanges = hasPerWindowProjectApps || !projectHiddenWindows.isEmpty
+    if hasAppChanges && !isUnitTest || hasWindowChanges {
         try? await normalizeLayoutReason() // Move windows to/from MacosHiddenAppsWindowsContainer
     }
 }
@@ -243,7 +261,8 @@ func getProjectVisibilityPlan(activeProject: String?, apps: [ProjectAppState], p
 }
 
 /// R3.2: target project's MRU window -> top window of the focused workspace -> empty focused workspace
-@MainActor func getFocusAfterProjectSwitch(_ project: String?, preferredPid: pid_t?) -> Window? {
+/// `preferredWindowId` (R4 for per-window apps) beats `preferredPid`
+@MainActor func getFocusAfterProjectSwitch(_ project: String?, preferredPid: pid_t?, preferredWindowId: UInt32? = nil) -> Window? {
     if let project {
         let mru = projectMruWindowIds[project].flatMap { Window.get(byId: $0) }
         let candidates: [Window?] = if let preferredPid {
@@ -251,7 +270,10 @@ func getProjectVisibilityPlan(activeProject: String?, apps: [ProjectAppState], p
         } else {
             [mru]
         }
-        if let window = candidates.lazy.compactMap({ $0 }).first(where: { getProjectName(of: $0.app) == project && $0.isFocusableAfterProjectSwitch }) {
+        let preferredWindow = preferredWindowId.flatMap { Window.get(byId: $0) }
+        if let window = ([preferredWindow] + candidates).lazy.compactMap({ $0 })
+            .first(where: { getWindowProjectName($0) == project && $0.isFocusableAfterProjectSwitch })
+        {
             return window
         }
     }
@@ -279,7 +301,7 @@ extension Window {
     if mruWindowIds.first != window.windowId {
         mruWindowIds = [window.windowId] + mruWindowIds.filter { $0 != window.windowId }.prefix(mruWindowIdsLimit - 1)
     }
-    guard let project = getProjectName(of: window.app) else { return }
+    guard let project = getWindowProjectName(window) else { return }
     projectMruWindowIds[project] = window.windowId
 }
 
@@ -304,6 +326,8 @@ func getProjectChangedEnvVars(prev: String?, new: String?) -> [String: String] {
         try await Task.sleep(for: .milliseconds(10))
     }
     guard let app = try await MacApp.getOrRegister(nsApp) else { return false }
+    // Per-window processes are never hidden as a whole. Their windows are handled by handleInactiveProjectWindowActivation
+    if isPerWindowProcess(app) { return false }
     guard let project = getProjectName(of: app), project != activeProjectName, !app.nsApp.isHidden else { return false }
     guard let token: RunSessionGuard = .isServerEnabled else { return false }
     try await runLightSession(event, token) {
