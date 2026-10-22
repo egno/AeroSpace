@@ -30,6 +30,9 @@ func setUpWorkspacesForTests() {
             child.unbindFromParent()
         }
     }
+    for child in macosPopupWindowsContainer.children + macosMinimizedWindowsContainer.children {
+        child.unbindFromParent()
+    }
     check(Workspace.get(byName: "setUpWorkspacesForTests").focusWorkspace())
     Workspace.garbageCollectUnusedWorkspaces()
     check(focus.workspace.isEffectivelyEmpty)
