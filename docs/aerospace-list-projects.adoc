@@ -1,0 +1,65 @@
+= aerospace-list-projects(1)
+include::util/man-attributes.adoc[]
+:manname: aerospace-list-projects
+// tag::purpose[]
+:manpurpose: Print the list of projects declared in the config
+// end::purpose[]
+
+// =========================================================== Synopsis
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace list-projects [-h|--help] [--active] [--format <output-format>] [--count] [--json]
+
+// end::synopsis[]
+
+// =========================================================== Description
+== Description
+
+// tag::body[]
+{manpurpose}
+
+Projects are printed in the order they are declared in the config.
+See xref:guide.adoc#projects[Projects] section in the guide.
+
+// =========================================================== Options
+include::util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+
+--active:: Only print the active project
+
+--format <output-format>:: Specify output format. See "Output Format" section for more details.
+Incompatible with `--count`
+
+--count:: Output only the number of projects.
+Incompatible with: `--format`, `--json`
+
+--json:: Output in JSON format.
+Can be used in combination with `--format` to specify which data to include into the json.
+Incompatible with `--count`
+
+// =========================================================== Output Format
+include::util/conditional-output-format-header.adoc[]
+
+Output format can be configured with optional `[--format <output-format>]` option.
+`<output-format>` supports https://en.wikipedia.org/wiki/String_interpolation[string interpolation].
+
+If not specified, the default `<output-format>` is: +
+`%{project-name}%{right-padding} | %{project-is-active}%{right-padding} | %{project-running-apps}`
+
+The following variables can be used inside `<output-format>`:
+
+%{project-name}:: String. Project name
+%{project-is-active}:: Boolean. True if the project is active
+%{project-apps}:: String. Space separated ids of `[project-apps.<id>]` referenced by the project
+%{project-running-apps}:: String. Space separated ids of `[project-apps.<id>]` referenced by the project that have a running process owned by the project
+
+%{right-padding}:: A special variable which expands with a minimum number of spaces required to form a right padding in the appropriate column
+%{newline}:: Unicode U+000A newline symbol `\n`
+%{tab}:: Unicode U+0009 tab symbol `\t`
+
+// end::body[]
+
+// =========================================================== Footer
+include::util/man-footer.adoc[]

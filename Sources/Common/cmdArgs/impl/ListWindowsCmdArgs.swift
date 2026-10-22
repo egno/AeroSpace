@@ -17,6 +17,7 @@ public struct ListWindowsCmdArgs: CmdArgs {
             "--workspace": ArgParser(\.filteringOptions.workspaces, parseWorkspaces),
             "--pid": singleValueSubArgParser(\.filteringOptions.pidFilter, "<pid>") { Int32($0).toResult("Can't convert to Int32") },
             "--app-bundle-id": singleValueSubArgParser(\.filteringOptions.appIdFilter, "<app-bundle-id>", Result.success),
+            "--project": projectFilterSubArgParser(\.filteringOptions.projectFilter),
 
             // Formatting flags
             "--format": formatParser(\._format, for: .window),
@@ -45,6 +46,7 @@ public struct ListWindowsCmdArgs: CmdArgs {
         public var workspaces: [WorkspaceFilter] = []
         public var pidFilter: Int32?
         public var appIdFilter: String?
+        public var projectFilter: ProjectFilter?
     }
 }
 
@@ -129,6 +131,7 @@ public enum FormatVar: RawRepresentable, Equatable, CaseIterable, Sendable {
     case workspace(WorkspaceFormatVar)
     case app(AppFormatVar)
     case monitor(MonitorFormatVar)
+    case project(ProjectFormatVar)
 
     // periphery:ignore
     private var kind: AeroObjKind {
@@ -137,6 +140,7 @@ public enum FormatVar: RawRepresentable, Equatable, CaseIterable, Sendable {
             case .monitor: .monitor
             case .window: .window
             case .workspace: .workspace
+            case .project: .project
         }
     }
 
@@ -147,6 +151,7 @@ public enum FormatVar: RawRepresentable, Equatable, CaseIterable, Sendable {
                 case .monitor: MonitorFormatVar.allCases.map(FormatVar.monitor)
                 case .window: WindowFormatVar.allCases.map(FormatVar.window)
                 case .workspace: WorkspaceFormatVar.allCases.map(FormatVar.workspace)
+                case .project: ProjectFormatVar.allCases.map(FormatVar.project)
             }
         }
     }
@@ -158,6 +163,7 @@ public enum FormatVar: RawRepresentable, Equatable, CaseIterable, Sendable {
                 case .monitor: MonitorFormatVar(rawValue: rawValue).map(FormatVar.monitor)
                 case .window: WindowFormatVar(rawValue: rawValue).map(FormatVar.window)
                 case .workspace: WorkspaceFormatVar(rawValue: rawValue).map(FormatVar.workspace)
+                case .project: ProjectFormatVar(rawValue: rawValue).map(FormatVar.project)
             }
         }.filterNotNil()
         switch value.sequencePattern {
@@ -173,6 +179,7 @@ public enum FormatVar: RawRepresentable, Equatable, CaseIterable, Sendable {
             case .monitor(let it): it.rawValue
             case .window(let it): it.rawValue
             case .workspace(let it): it.rawValue
+            case .project(let it): it.rawValue
         }
     }
 
@@ -182,6 +189,7 @@ public enum FormatVar: RawRepresentable, Equatable, CaseIterable, Sendable {
         case windowTitle = "window-title"
         case windowLayout = "window-layout" // An alias for windowParentContainerLayout
         case windowParentContainerLayout = "window-parent-container-layout"
+        case windowProject = "window-project"
     }
 
     public enum WorkspaceFormatVar: String, Equatable, CaseIterable, Sendable {
@@ -197,6 +205,8 @@ public enum FormatVar: RawRepresentable, Equatable, CaseIterable, Sendable {
         case appPid = "app-pid"
         case appExecPath = "app-exec-path"
         case appBundlePath = "app-bundle-path"
+        case appArgs = "app-args"
+        case appProject = "app-project"
     }
 
     public enum MonitorFormatVar: String, Equatable, CaseIterable, Sendable {
@@ -204,6 +214,13 @@ public enum FormatVar: RawRepresentable, Equatable, CaseIterable, Sendable {
         case monitorAppKitNsScreenScreensId = "monitor-appkit-nsscreen-screens-id"
         case monitorName = "monitor-name"
         case monitorIsMain = "monitor-is-main"
+    }
+
+    public enum ProjectFormatVar: String, Equatable, CaseIterable, Sendable {
+        case projectName = "project-name"
+        case projectIsActive = "project-is-active"
+        case projectApps = "project-apps"
+        case projectRunningApps = "project-running-apps"
     }
 }
 
@@ -262,7 +279,7 @@ public enum InterVar: RawRepresentable, Equatable, CaseIterable, Sendable {
 }
 
 public enum AeroObjKind: CaseIterable, Sendable {
-    case window, workspace, app, monitor
+    case window, workspace, app, monitor, project
 }
 
 public func getAvailableInterVars(for kind: AeroObjKind) -> [String] {
@@ -273,6 +290,7 @@ private func _getAvailableInterVars(for kind: AeroObjKind) -> [String] {
     switch kind {
         case .app: FormatVar.AppFormatVar.allCases.map(\.rawValue)
         case .monitor: FormatVar.MonitorFormatVar.allCases.map(\.rawValue)
+        case .project: FormatVar.ProjectFormatVar.allCases.map(\.rawValue)
         case .workspace:
             FormatVar.WorkspaceFormatVar.allCases.map(\.rawValue) +
                 _getAvailableInterVars(for: .monitor)

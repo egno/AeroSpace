@@ -40,6 +40,12 @@ func setUpWorkspacesForTests() {
     TestApp.shared.windows = []
 
     global_layoutForNextDetectedWindow = nil
+
+    activeProjectName = nil
+    prevActiveProjectName = nil
+    projectHiddenPids = []
+    projectMruWindowIds = [:]
+    resetProjectOwnershipCache()
 }
 
 extension ParsedCmd {

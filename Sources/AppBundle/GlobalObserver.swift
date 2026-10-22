@@ -9,8 +9,14 @@ enum GlobalObserver {
             return
         }
         let notifName = notification.name.rawValue
+        let nsApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
         Task.startUnstructured { @MainActor in
             if !TrayMenuModel.shared.isEnabled { return }
+            if let nsApp, notifName == NSWorkspace.didActivateApplicationNotification.rawValue || notifName == NSWorkspace.didUnhideApplicationNotification.rawValue,
+               try await handleInactiveProjectActivation(nsApp, .globalObserver(notifName))
+            {
+                return
+            }
             if notifName == NSWorkspace.didActivateApplicationNotification.rawValue {
                 scheduleCancellableCompleteRefreshSession(.globalObserver(notifName), optimisticallyPreLayoutWorkspaces: true)
             } else {
@@ -29,14 +35,15 @@ enum GlobalObserver {
                        w.macAppUnsafe.nsApp.isHidden,
                        // "Hide others" (cmd-alt-h) -> don't force focus
                        // "Hide app" (cmd-h) -> force focus
-                       MacApp.allAppsMap.values.count(where: { $0.nsApp.isHidden }) == 1
+                       !projectHiddenPids.contains(w.app.pid),
+                       MacApp.allAppsMap.values.count(where: { $0.nsApp.isHidden && !projectHiddenPids.contains($0.pid) }) == 1
                     {
                         // Force focus
                         _ = w.focusWindow()
                         w.nativeFocus()
                     }
-                    for app in MacApp.allAppsMap.values {
-                        app.nsApp.unhide()
+                    for pid in getPidsToAutoUnhide(Array(MacApp.allAppsMap.keys)) {
+                        MacApp.allAppsMap[pid]?.nsApp.unhide()
                     }
                 }
             }

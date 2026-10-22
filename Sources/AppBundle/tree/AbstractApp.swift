@@ -8,6 +8,8 @@ protocol AbstractApp: AnyObject, Hashable, AeroAny {
     var name: String? { get }
     var execPath: String? { get }
     var bundlePath: String? { get }
+    /// Process argv joined with spaces
+    var args: String? { get }
 }
 
 extension AbstractApp {

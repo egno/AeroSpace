@@ -130,6 +130,7 @@ extension Workspace {
     if frozenFocus != _lastKnownFocus {
         _prevFocus = _lastKnownFocus
         hasFocusChanged = true
+        rememberProjectMruWindow(focus.windowOrNil)
     }
     if frozenFocus.workspaceName != _lastKnownFocus.workspaceName {
         _prevFocusedWorkspaceName = _lastKnownFocus.workspaceName

@@ -1,0 +1,59 @@
+= aerospace-project(1)
+include::util/man-attributes.adoc[]
+:manname: aerospace-project
+// tag::purpose[]
+:manpurpose: Switch the active project
+// end::purpose[]
+
+// =========================================================== Synopsis
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace project [-h|--help] <project-name>
+aerospace project [-h|--help] [--wrap-around] (next|prev)
+aerospace project [-h|--help] --none
+
+// end::synopsis[]
+
+// =========================================================== Description
+== Description
+
+// tag::body[]
+{manpurpose}
+
+Projects are declared in the config with `[[projects]]` and `[project-apps.<id>]`.
+See xref:guide.adoc#projects[Projects] section in the guide.
+
+The command unhides the processes of the target project first, and then hides the processes of all other projects
+using macOS native app hiding (`cmd-h`).
+Processes that don't belong to any project (global processes) are never touched.
+Apps that you hid manually (`cmd-h`) are not unhidden by the command.
+
+After the switch, the most recently focused window of the target project gets focus.
+If there is no such window, the top window of the focused workspace gets focus.
+
+* `<project-name>` switches to the specified project
+* `next`/`prev` switches to the next/previous project in the order they are declared in the config.
+If no project is active, `next` switches to the first project, and `prev` switches to the last project.
+* `--none` hides the processes of all projects.
+Only global processes stay visible.
+
+The active project is preserved across AeroSpace restarts.
+
+Also see: <<project-back-and-forth, project-back-and-forth>>, <<list-projects, list-projects>>
+// end::body[]
+
+// =========================================================== Options
+include::util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+--wrap-around:: Make it possible to jump between first and last projects using `(next|prev)`
+--none:: Deactivate the active project. Hide the processes of all projects
+
+// =========================================================== Arguments
+include::./util/conditional-arguments-header.adoc[]
+
+<project-name>:: Project name to switch to. It must be declared in the config
+
+// =========================================================== Footer
+include::util/man-footer.adoc[]

@@ -30,6 +30,7 @@ import Foundation
         )
         try await runLightSession(.startup, .forceRun) {
             smartLayoutAtStartup()
+            await restoreProjectStateOnStartup()
             _ = await config.afterStartupCommand.run(.defaultEnv, .emptyStdin)
         }
     }

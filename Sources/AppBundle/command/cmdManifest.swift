@@ -48,6 +48,8 @@ extension CmdArgs {
                 command = ListModesCommand(args: self as! ListModesCmdArgs)
             case .listMonitors:
                 command = ListMonitorsCommand(args: self as! ListMonitorsCmdArgs)
+            case .listProjects:
+                command = ListProjectsCommand(args: self as! ListProjectsCmdArgs)
             case .listWindows:
                 command = ListWindowsCommand(args: self as! ListWindowsCmdArgs)
             case .listWorkspaces:
@@ -68,6 +70,10 @@ extension CmdArgs {
                 command = MoveNodeToWorkspaceCommand(args: self as! MoveNodeToWorkspaceCmdArgs)
             case .moveWorkspaceToMonitor:
                 command = MoveWorkspaceToMonitorCommand(args: self as! MoveWorkspaceToMonitorCmdArgs)
+            case .project:
+                command = ProjectCommand(args: self as! ProjectCmdArgs)
+            case .projectBackAndForth:
+                command = ProjectBackAndForthCommand(args: self as! ProjectBackAndForthCmdArgs)
             case .reloadConfig:
                 command = ReloadConfigCommand(args: self as! ReloadConfigCmdArgs)
             case .resize:

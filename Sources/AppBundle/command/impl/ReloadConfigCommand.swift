@@ -31,7 +31,8 @@ struct ReloadConfigResult {
     let parseResult = result.parseConfigResult
     let warningsAsErrors = args.warningsAsErrors
 
-    var errors = parseResult.errors.map { $0.description(.error) }
+    var errors = parseResult.errors.map { $0.description(.error) } +
+        getProjectOwnershipConflictErrors(parseResult.config.projects, Array(MacApp.allAppsMap.values))
     var warnings = parseResult.warnings.map { $0.description(.warning) }
     let containsWarnings = !parseResult.warnings.isEmpty
 
@@ -39,7 +40,7 @@ struct ReloadConfigResult {
         let lines = errors + warnings
         switch true {
             case !errors.isEmpty:
-                let msg = failedToParseMsg(configUrl: result.configUrl, errorsCount: parseResult.errors.count, warningsCount: parseResult.warnings.count, lines: lines)
+                let msg = failedToParseMsg(configUrl: result.configUrl, errorsCount: errors.count, warningsCount: parseResult.warnings.count, lines: lines)
                 MessageModel.shared.message = Message(body: msg, containsWarnings: containsWarnings)
             case warningsAsErrors && !warnings.isEmpty:
                 let msg = parsedWithWarningsMsg(configUrl: result.configUrl, warningsCount: parseResult.warnings.count, lines: lines)
@@ -57,6 +58,7 @@ struct ReloadConfigResult {
         syncStartAtLogin()
         syncFocusFollowsMouse(config)
         syncConfigFileWatcher()
+        await onProjectsConfigReloaded()
     }
 
     if warningsAsErrors {

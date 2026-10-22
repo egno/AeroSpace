@@ -661,6 +661,77 @@ Besides the <<exec-env-vars,`exec.env-vars`>>, the process has access to the fol
 For a more elaborate example on how to integrate with Sketchybar see
 xref:./goodies.adoc#show-aerospace-workspaces-in-sketchybar[]
 
+[#projects]
+== Projects
+
+A project is a set of dedicated app instances (processes): e.g. a separate Chrome with its own `--user-data-dir`,
+a separate kitty with its own `--instance-group`.
+Exactly one project is active at a time (or none).
+xref:commands.adoc#project[project] command switches the active project:
+the processes of the target project are unhidden, and the processes of all other projects are hidden with macOS native
+app hiding (`cmd-h`).
+Processes that don't belong to any project are global and never touched.
+
+Projects don't own workspaces.
+Windows of hidden processes keep their workspaces, so workspaces keep their meaning ("terminal", "browser")
+regardless of the active project.
+
+[source,toml]
+----
+# App definitions. 'if' uses the same syntax as 'on-window-detected', but only 'test', 'test-not', 'true', 'false'
+# commands and %{app-*} variables are allowed, because the matcher is evaluated against a process, not a window.
+# {project} is substituted with the project name.
+[project-apps.chrome] # Shared. Every project that references it gets its own instance
+if = 'test %{app-bundle-id} = com.google.Chrome && test %{app-args} ~= " --user-data-dir=.*/\.chrome/{project}( |$)"'
+launch = 'open -na "Google Chrome" --args --user-data-dir="$HOME/.chrome/{project}"'
+global-launch = 'open -na "Google Chrome"'
+
+[project-apps.kitty]
+if = 'test %{app-bundle-id} = net.kovidgoyal.kitty && test %{app-args} ~= " --instance-group[= ]{project}( |$)"'
+launch = 'kitty --single-instance --instance-group {project}'
+
+[project-apps.firefox] # Whole app. All Firefox processes belong to the single project that references it
+if = 'test %{app-bundle-id} = org.mozilla.firefox'
+
+# The order of [[projects]] defines 'project next|prev' order
+[[projects]]
+name = 'anna' # Must match [a-z0-9_-]+
+apps = ['chrome', 'kitty']
+
+[[projects]]
+name = 'company'
+apps = ['chrome', 'firefox', { app = 'kitty', autostart = false, open = [] }]
+link-browser = 'chrome' # Defaults to 'chrome' if the project references it
+
+# What to do when a process of an inactive project gets activated from outside (cmd-tab, Dock, notification click)
+# 'switch' (default) switches to the project. 'rehide' hides the process again
+on-inactive-project-activation = 'switch'
+
+on-project-changed = 'exec-and-forget sketchybar --trigger aerospace_project_change'
+
+[mode.main.binding]
+alt-p = 'project next --wrap-around'
+alt-shift-p = 'project-back-and-forth'
+----
+
+* Ownership is decided per process (PID) once, and recomputed on `reload-config`.
+Every window of a process belongs to the project of the process.
+* `%{app-args}` is the process command line (`argv` joined with spaces).
+Since `test` treats arguments that start with `-` as flags, start the regex with a space: `" --user-data-dir=..."`.
+* A whole-app definition (no `{project}` in `if`) can be referenced by only one project.
+* If a process matches a shared definition of one project and a whole-app definition of another project,
+the shared match wins. Other ties are reported as errors by `reload-config`, and the process is treated as global.
+* Apps that you hid manually (`cmd-h`) are never unhidden by project switching.
+* `automatically-unhide-macos-hidden-apps = true` doesn't unhide apps hidden by project switching.
+* `enable off` and quitting AeroSpace unhide all apps hidden by project switching.
+* The active project is stored in `$XDG_STATE_HOME/aerospace/projects.json` (`~/.local/state/aerospace/projects.json` by default)
+and restored on startup.
+* `autostart`, `open`, `launch` and `global-launch` are reserved for project launching commands, and are not used yet.
+
+Use `%{app-project}` and `%{window-project}` interpolation variables, `list-windows --project`, `list-apps --project`,
+xref:commands.adoc#list-projects[list-projects] and `project-changed` xref:commands.adoc#subscribe[subscribe] event to
+integrate with other tools.
+
 [#environment-variables]
 == Environment variables
 

@@ -7,6 +7,7 @@ final class TestApp: AbstractApp {
     let name: String?
     let execPath: String? = nil
     let bundlePath: String? = nil
+    let args: String? = nil
     @MainActor
     static let shared = TestApp()
 

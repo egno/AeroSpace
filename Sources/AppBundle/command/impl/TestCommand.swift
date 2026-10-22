@@ -25,31 +25,31 @@ struct TestCommand: Command {
             }
         }) else { return .fail }
 
-        let infixOperator = args.infixOperator.val
-        let rhs = args.rhs.val
-        let lhsType = lhs.kind.rawValue
-        let incompatibleLhsAndOperatorMsg = """
-            Interpolation variable: \(args.lhs.val.rawValue.singleQuoted) has a type of \(lhsType). The \(lhsType) type is not compatible with \(args.infixOperator.val.rawValue.singleQuoted) operator.
-            """
-
-        let result: Result<Bool, String> = switch (lhs, infixOperator) {
-            case (.bool(let lhs), .equals):
-                Bool(rhs).toResult("Can't convert String \(rhs.singleQuoted) to Bool").map { rhs in lhs == rhs }
-            case (.bool, .matchesRegex):
-                .failure(incompatibleLhsAndOperatorMsg)
-            case (.int(let lhs), .equals):
-                Int64(rhs).toResult("Can't convert String \(rhs.singleQuoted) to Int").map { rhs in lhs == rhs }
-            case (.int, .matchesRegex):
-                .failure(incompatibleLhsAndOperatorMsg)
-            case (.string(let lhs), .equals):
-                .success(lhs == rhs)
-            case (.string(let lhs), .matchesRegex):
-                CaseInsensitiveRegex.new(rhs).map { rhs in lhs.contains(caseInsensitiveRegex: rhs) }
-        }
-
-        return switch result {
+        return switch evalTestCondition(lhs, lhsVar: args.lhs.val, args.infixOperator.val, args.rhs.val) {
             case .success(let result): result ? ._true : ._false
             case .failure(let err): .fail(io.err(err))
         }
+    }
+}
+
+@MainActor func evalTestCondition(_ lhs: Primitive, lhsVar: FormatVar, _ infixOperator: InfixOperator, _ rhs: String) -> Result<Bool, String> {
+    let lhsType = lhs.kind.rawValue
+    let incompatibleLhsAndOperatorMsg = """
+        Interpolation variable: \(lhsVar.rawValue.singleQuoted) has a type of \(lhsType). The \(lhsType) type is not compatible with \(infixOperator.rawValue.singleQuoted) operator.
+        """
+
+    return switch (lhs, infixOperator) {
+        case (.bool(let lhs), .equals):
+            Bool(rhs).toResult("Can't convert String \(rhs.singleQuoted) to Bool").map { rhs in lhs == rhs }
+        case (.bool, .matchesRegex):
+            .failure(incompatibleLhsAndOperatorMsg)
+        case (.int(let lhs), .equals):
+            Int64(rhs).toResult("Can't convert String \(rhs.singleQuoted) to Int").map { rhs in lhs == rhs }
+        case (.int, .matchesRegex):
+            .failure(incompatibleLhsAndOperatorMsg)
+        case (.string(let lhs), .equals):
+            .success(lhs == rhs)
+        case (.string(let lhs), .matchesRegex):
+            CaseInsensitiveRegex.new(rhs).map { rhs in lhs.contains(caseInsensitiveRegex: rhs) }
     }
 }

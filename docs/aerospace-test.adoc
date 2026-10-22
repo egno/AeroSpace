@@ -53,12 +53,15 @@ include::./util/conditional-interpolation-variables-header.adoc[]
 %{window-is-fullscreen}:: Boolean. Is window in fullscreen by `aerospace fullscreen` command
 %{window-layout}:: String. An alias for `%{window-parent-container-layout}`
 %{window-parent-container-layout}:: String. The layout (`v_tiles`, `h_tiles`, `v_accordion`, `h_accordion`, `floating`) of the window's parent container.
+%{window-project}:: String. The name of the project that owns the window. Empty string for global windows
  
 %{app-bundle-id}:: String. Application unique identifier. https://developer.apple.com/documentation/appstoreconnectapi/bundle_ids[Bundle ID]
 %{app-name}:: String. Application name
 %{app-pid}:: Number. https://en.wikipedia.org/wiki/Process_identifier[UNIX process identifier]
 %{app-exec-path}:: String. Application executable path
 %{app-bundle-path}:: String. Application bundle path
+%{app-args}:: String. Process command line arguments (`argv`) joined with spaces
+%{app-project}:: String. The name of the project that owns the application process. Empty string for global processes
  
 %{workspace}:: String. Name of the belonging workspace
 %{workspace-is-focused}:: Boolean. `true` if the workspace has focus

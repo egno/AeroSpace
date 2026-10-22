@@ -34,6 +34,7 @@ enum AeroObj {
     case workspace(Workspace)
     case app(any AbstractApp)
     case monitor(MonitorInfo)
+    case project(ProjectInfo)
 
     var kind: AeroObjKind {
         switch self {
@@ -41,6 +42,7 @@ enum AeroObj {
             case .workspace: .workspace
             case .app: .app
             case .monitor: .monitor
+            case .project: .project
         }
     }
 }
@@ -144,6 +146,7 @@ extension FormatVar {
             case (.window(let w), .app):
                 return expandFormatVar(obj: .app(w.window.app))
             case (.window(_), .window): break
+            case (.window(_), .project): break
 
             case (.workspace(let ws), .monitor):
                 return expandFormatVar(obj: AeroObj.monitor(ws.workspaceMonitor))
@@ -151,6 +154,7 @@ extension FormatVar {
 
             case (.app(_), _): break
             case (.monitor(_), _): break
+            case (.project(_), _): break
         }
 
         switch (obj, self) {
@@ -160,6 +164,7 @@ extension FormatVar {
                     case .windowIsFullscreen: .success(.bool(w.window.isFullscreen))
                     case .windowTitle: .success(.string(w.title.orDie("Title wasn't prefetched")))
                     case .windowLayout, .windowParentContainerLayout: toLayoutResult(w: w.window)
+                    case .windowProject: .success(.string(getProjectName(of: w.window.app) ?? ""))
                 }
             case (.workspace(let w), .workspace(let f)):
                 return switch f {
@@ -175,6 +180,13 @@ extension FormatVar {
                     case .monitorName: .success(.string(m.name))
                     case .monitorIsMain: .success(.bool(m.isMain))
                 }
+            case (.project(let p), .project(let f)):
+                return switch f {
+                    case .projectName: .success(.string(p.name))
+                    case .projectIsActive: .success(.bool(p.isActive))
+                    case .projectApps: .success(.string(p.appIds.joined(separator: " ")))
+                    case .projectRunningApps: .success(.string(p.runningAppIds.joined(separator: " ")))
+                }
             case (.app(let a), .app(let f)):
                 return switch f {
                     case .appBundleId: .success(.string(a.rawAppBundleId ?? "NULL-APP-BUNDLE-ID"))
@@ -182,6 +194,8 @@ extension FormatVar {
                     case .appPid: .success(.int(a.pid))
                     case .appExecPath: .success(.string(a.execPath ?? "NULL-APP-EXEC-PATH"))
                     case .appBundlePath: .success(.string(a.bundlePath ?? "NULL-APP-BUNDLE-PATH"))
+                    case .appArgs: .success(.string(a.args ?? "NULL-APP-ARGS"))
+                    case .appProject: .success(.string(getProjectName(of: a) ?? ""))
                 }
             default: break
         }

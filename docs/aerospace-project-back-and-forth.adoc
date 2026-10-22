@@ -1,0 +1,34 @@
+= aerospace-project-back-and-forth(1)
+include::util/man-attributes.adoc[]
+// tag::purpose[]
+:manpurpose: Switch between the active project and previously active project back and forth
+// end::purpose[]
+:manname: aerospace-project-back-and-forth
+
+// =========================================================== Synopsis
+== Synopsis
+[verse]
+// tag::synopsis[]
+aerospace project-back-and-forth [-h|--help]
+
+// end::synopsis[]
+
+// =========================================================== Description
+== Description
+
+// tag::body[]
+{manpurpose}
+
+"No active project" (see `project --none`) counts as a project state too.
+The command fails if no project was active previously.
+
+Also see: <<project, project>>
+// end::body[]
+
+// =========================================================== Options
+include::util/conditional-options-header.adoc[]
+
+-h, --help:: Print help
+
+// =========================================================== Footer
+include::util/man-footer.adoc[]

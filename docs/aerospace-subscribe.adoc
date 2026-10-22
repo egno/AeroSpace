@@ -50,6 +50,8 @@ window-detected:: Fired when a new window is detected. Includes `windowId`, `wor
 
 binding-triggered:: Fired when a keyboard binding is triggered. Includes `binding`, `mode`.
 
+project-changed:: Fired when the active project changes. Includes `project`, `prevProject` (absent when no project is active).
+
 // =========================================================== Output Format
 include::util/conditional-output-format-header.adoc[]
 

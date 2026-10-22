@@ -24,6 +24,7 @@ public enum CmdKind: String, CaseIterable, Equatable, Sendable {
     case listExecEnvVars = "list-exec-env-vars"
     case listModes = "list-modes"
     case listMonitors = "list-monitors"
+    case listProjects = "list-projects"
     case listWindows = "list-windows"
     case listWorkspaces = "list-workspaces"
     case macosNativeFullscreen = "macos-native-fullscreen"
@@ -34,6 +35,8 @@ public enum CmdKind: String, CaseIterable, Equatable, Sendable {
     case moveNodeToMonitor = "move-node-to-monitor"
     case moveNodeToWorkspace = "move-node-to-workspace"
     case moveWorkspaceToMonitor = "move-workspace-to-monitor"
+    case project
+    case projectBackAndForth = "project-back-and-forth"
     case reloadConfig = "reload-config"
     case resize
     case runCallback = "run-callback"
@@ -98,6 +101,8 @@ func initSubcommands() -> [String: any SubCommandParserProtocol] {
                 result[kind.rawValue] = SubCommandParser(parseListModesCmdArgs)
             case .listMonitors:
                 result[kind.rawValue] = SubCommandParser(parseListMonitorsCmdArgs)
+            case .listProjects:
+                result[kind.rawValue] = SubCommandParser(parseListProjectsCmdArgs)
             case .listWindows:
                 result[kind.rawValue] = SubCommandParser(parseListWindowsCmdArgs)
             case .listWorkspaces:
@@ -122,6 +127,10 @@ func initSubcommands() -> [String: any SubCommandParserProtocol] {
                 result[kind.rawValue] = SubCommandParser(parseWorkspaceToMonitorCmdArgs)
                 // deprecated
                 result["move-workspace-to-display"] = SubCommandParser(MoveWorkspaceToMonitorCmdArgs.init)
+            case .project:
+                result[kind.rawValue] = SubCommandParser(parseProjectCmdArgs)
+            case .projectBackAndForth:
+                result[kind.rawValue] = SubCommandParser(ProjectBackAndForthCmdArgs.init)
             case .reloadConfig:
                 result[kind.rawValue] = SubCommandParser(ReloadConfigCmdArgs.init)
             case .resize:

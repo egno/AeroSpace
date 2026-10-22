@@ -8,6 +8,7 @@ final class MacApp: AbstractApp {
     /*conforms*/ let pid: Int32
     /*conforms*/ let rawAppBundleId: String?
     let appId: KnownBundleId?
+    /*conforms*/ let args: String?
     let nsApp: NSRunningApplication
     private let axApp: ThreadGuardedValue<AXUIElement>
     private let appAxSubscriptions: ThreadGuardedValue<[AxSubscription]> // keep subscriptions in memory
@@ -38,6 +39,7 @@ final class MacApp: AbstractApp {
         self.pid = nsApp.processIdentifier
         self.rawAppBundleId = nsApp.bundleIdentifier
         self.appId = nsApp.bundleIdentifier.flatMap { KnownBundleId.init(rawValue: $0) }
+        self.args = getProcessArgs(pid: nsApp.processIdentifier)
         assert(!axSubscriptions.isEmpty)
         self.appAxSubscriptions = .init(axSubscriptions)
         self.thread = thread
@@ -169,6 +171,13 @@ final class MacApp: AbstractApp {
             case true: return
             case false: semaphore.wait()
         }
+    }
+
+    /// Returns true if the AX request succeeded. Hide/unhide is asynchronous, observe nsApp.isHidden to wait for the effect
+    func setAxHidden(_ value: Bool) async -> Bool {
+        (try? await thread?.runInLoop(.nonCancellable) { [axApp] job in
+            axApp.threadGuarded.set(Ax.hiddenAttr, value)
+        }) == true
     }
 
     func getAxWindowsCount(_ cm: CancellationMode) async throws -> Int? {

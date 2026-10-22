@@ -31,8 +31,10 @@ struct EnableCommand: Command {
                 }
             }
             await activateMode_nonCancellable(mainModeId)
+            await reapplyProjectVisibility()
         } else {
             await activateMode_nonCancellable(nil)
+            await unhideAllProjectHiddenApps()
         }
         return .succ
     }

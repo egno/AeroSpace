@@ -61,6 +61,11 @@ struct Config: ConvenienceMutable {
     var modes: [String: Mode] = [:]
     var onWindowDetected: [WindowDetectedCallback] = []
     var onModeChanged: Shell<any Command> = .empty
+
+    var projectApps: [String: ProjectAppDef] = [:]
+    var projects: [Project] = []
+    var onInactiveProjectActivation: InactiveProjectActivationPolicy = ._switch
+    var onProjectChanged: Shell<any Command> = .empty
 }
 
 struct FocusFollowsMouse: ConvenienceMutable {

@@ -6,6 +6,8 @@ public struct ListAppsCmdArgs: CmdArgs {
         help: list_apps_help_generated,
         flags: [
             "--macos-native-hidden": boolFlag(\.macosHidden),
+            "--project": projectFilterSubArgParser(\.projectFilter),
+            "--pid": singleValueSubArgParser(\.pidFilter, "<pid>") { Int32($0).toResult("Can't convert to Int32") },
 
             // Formatting flags
             "--format": formatParser(\._format, for: .app),
@@ -20,6 +22,8 @@ public struct ListAppsCmdArgs: CmdArgs {
     )
 
     public var macosHidden: Bool?
+    public var projectFilter: ProjectFilter?
+    public var pidFilter: Int32?
     public var _format: [InterToken<InterVar>] = []
     public var outputOnlyCount: Bool = false
     public var json: Bool = false

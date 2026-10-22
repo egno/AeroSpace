@@ -10,6 +10,12 @@ struct ListAppsCommand: Command {
         if let hidden = args.macosHidden {
             result = result.filter { $0.nsApp.isHidden == hidden }
         }
+        if let pid = args.pidFilter {
+            result = result.filter { $0.pid == pid }
+        }
+        if let projectFilter = args.projectFilter {
+            result = result.filter { projectFilter.matches($0) }
+        }
 
         lazy var list = result.map(AeroObj.app)
         return switch true {

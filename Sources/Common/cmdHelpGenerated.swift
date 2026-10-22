@@ -73,7 +73,8 @@ let layout_help_generated = """
        OR: layout [-h|--help] --for-next-detected-window (tiling|floating)
     """
 let list_apps_help_generated = """
-    USAGE: list-apps [-h|--help] [--macos-native-hidden [no]] [--format <output-format>] [--count] [--json]
+    USAGE: list-apps [-h|--help] [--macos-native-hidden [no]] [--pid <pid>]
+                     [--project (<project-name>|--none|--active)] [--format <output-format>] [--count] [--json]
     """
 let list_exec_env_vars_help_generated = """
     USAGE: list-exec-env-vars [-h|--help]
@@ -84,10 +85,14 @@ let list_modes_help_generated = """
 let list_monitors_help_generated = """
     USAGE: list-monitors [-h|--help] [--focused [no]] [--mouse [no]] [--format <output-format>] [--count] [--json]
     """
+let list_projects_help_generated = """
+    USAGE: list-projects [-h|--help] [--active] [--format <output-format>] [--count] [--json]
+    """
 let list_windows_help_generated = """
     USAGE: list-windows [-h|--help] (--workspace <workspace>...|--monitor <monitor>...)
                         [--monitor <monitor>...] [--workspace <workspace>...]
-                        [--pid <pid>] [--app-bundle-id <app-bundle-id>] [--format <output-format>]
+                        [--pid <pid>] [--app-bundle-id <app-bundle-id>]
+                        [--project (<project-name>|--none|--active)] [--format <output-format>]
                         [--count] [--json]
        OR: list-windows [-h|--help] --all [--format <output-format>] [--count] [--json]
        OR: list-windows [-h|--help] --focused [--format <output-format>] [--count] [--json]
@@ -133,6 +138,14 @@ let move_help_generated = """
     USAGE: move [-h|--help] [--window-id <window-id>] [--boundaries <boundary>]
                 [--boundaries-action <boundary-action>] [--fail-if-fullscreen]
                 [--fail-if-macos-native-fullscreen] (left|down|up|right)
+    """
+let project_back_and_forth_help_generated = """
+    USAGE: project-back-and-forth [-h|--help]
+    """
+let project_help_generated = """
+    USAGE: project [-h|--help] <project-name>
+       OR: project [-h|--help] [--wrap-around] (next|prev)
+       OR: project [-h|--help] --none
     """
 let reload_config_help_generated = """
     USAGE: reload-config [-h|--help] [--no-gui] [--dry-run] [--warnings-as-errors]
